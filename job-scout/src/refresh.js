@@ -11,7 +11,7 @@ var fs = require('fs');
 var path = require('path');
 var { parseResponse } = require('./parse');
 var { mergeJobs, existingUrls } = require('./merge');
-var { searchJobs } = require('./search');
+var { searchJobs, redact } = require('./search');
 var { fetchAll, prefilter, hydrate } = require('./sources');
 var { batches, scoreBatch, keepKnownUrls } = require('./score');
 var { boardKey } = require('../site/boards');
@@ -58,8 +58,39 @@ function writeBoardHealth(results) {
       reason: r.reason || ''
     };
   });
+  patchHealth({ checked: today(), boards: boards });
+}
+
+/**
+ * Merges into the health file rather than replacing it, so recording an outcome
+ * does not throw away the board results the same run just gathered — and a run
+ * that dies before polling leaves the previous run's boards standing.
+ */
+function patchHealth(fields) {
+  var cur = {};
+  if (fs.existsSync(BOARDS_PATH)) {
+    try { cur = JSON.parse(fs.readFileSync(BOARDS_PATH, 'utf8')) || {}; } catch (err) { cur = {}; }
+  }
   fs.writeFileSync(BOARDS_PATH,
-    JSON.stringify({ checked: today(), boards: boards }, null, 2) + '\n');
+    JSON.stringify(Object.assign(cur, fields), null, 2) + '\n');
+}
+
+/**
+ * Why the last search ended as it did, in the words the run log used.
+ *
+ * "The run finished as failure" is a dead end for anyone who is not going to go
+ * and read a workflow log; the log's own first line usually says exactly what
+ * to fix. Redacted on the way out — this file is committed to a public repo,
+ * and an error body is not a place to trust with a key.
+ */
+function recordOutcome(ok, reason) {
+  patchHealth({
+    lastRun: {
+      ok: ok,
+      at: today(),
+      reason: redact(String(reason || ''), process.env.ANTHROPIC_API_KEY)
+    }
+  });
 }
 
 function setOutput(key, value) {
@@ -136,7 +167,10 @@ async function main() {
   console.log('Wrote ' + result.jobs.length + ' listing(s) to jobs.json.');
 }
 
-main().catch(function (err) {
+main().then(function () {
+  recordOutcome(true, '');
+}, function (err) {
   console.error('Refresh failed: ' + err.message);
+  recordOutcome(false, err.message);
   process.exit(1);
 });

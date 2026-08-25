@@ -632,8 +632,10 @@ function syncFromRepo(){
     if(res[1].data&&typeof res[1].data==='object'){
       DATA.boards=res[1].data.boards||{};
       DATA.boardsChecked=res[1].data.checked||'';
+      DATA.lastRun=res[1].data.lastRun||null;
     }
     renderCompanies();
+    renderLastRun();
   },function(){ /* published copy stands */ });
 
   return Promise.all([syncStatuses(),settings,watchlist]);
@@ -729,8 +731,15 @@ function doRefresh(){
         return;
       }
       if(run.conclusion!=='success'){
-        toast('The run finished as '+run.conclusion+'. Check View runs in Settings.',true);
-        return;
+        // The run records why it stopped before it exits, so the reason is
+        // committed by the time the run reports itself complete.
+        return syncFromRepo().then(function(){
+          var why=DATA.lastRun&&DATA.lastRun.ok===false?DATA.lastRun.reason:'';
+          writeLocal(RUN_SEEN,'');
+          renderLastRun();
+          toast(why||('The run finished as '+run.conclusion+
+            '. Check View runs in Settings.'),true);
+        });
       }
       setRefreshLabel('Publishing…',true);
       return awaitNewListings();
@@ -1035,7 +1044,9 @@ function loadCompanies(){
     DATA.companies=Array.isArray(res[0])?res[0]:[];
     DATA.boards=(res[1]&&res[1].boards)||{};
     DATA.boardsChecked=(res[1]&&res[1].checked)||'';
+    DATA.lastRun=(res[1]&&res[1].lastRun)||null;
     renderCompanies();
+    renderLastRun();
   });
 }
 
@@ -1101,6 +1112,55 @@ function renderCompanies(){
     var h=healthOf(c);
     return !!h&&h.ok===false;
   }).length);
+}
+
+/* ------------------------------------------------------ last run */
+
+var RUN_SEEN='jobscout.runDismissed';
+
+/**
+ * Turns the run's own failure line into the thing to go and do about it.
+ *
+ * The two that actually happen are a missing secret and a rejected one, and
+ * they need different fixes — one is "add it", the other is "the one saved
+ * there is wrong". Anything unrecognised is shown verbatim rather than
+ * paraphrased into something vaguer than the truth.
+ */
+function runAdvice(reason){
+  var r=String(reason||'');
+  if(/is not set/i.test(r)){
+    return 'The repository has no Anthropic key saved. In the repository, open '+
+      'Settings \u2192 Secrets and variables \u2192 Actions and add one named '+
+      'ANTHROPIC_API_KEY.';
+  }
+  if(/rejected \(401\)|key was rejected/i.test(r)){
+    return 'Anthropic refused the key saved in the repository \u2014 it is wrong, '+
+      'expired, or was revoked. Make a new one at console.anthropic.com, then '+
+      'replace ANTHROPIC_API_KEY under Settings \u2192 Secrets and variables \u2192 '+
+      'Actions in the repository.';
+  }
+  if(/rate limit|\(429\)/i.test(r)){
+    return 'Anthropic is rate limiting the key. Wait a few minutes and press '+
+      'Refresh listings again.';
+  }
+  return '';
+}
+
+function renderLastRun(){
+  var el=$('runBanner');
+  var run=DATA.lastRun;
+  if(!run||run.ok!==false){ el.hidden=true; return; }
+
+  // Dismissal is per failure, not for good: a new one has to speak up again.
+  var stamp=(run.at||'')+'|'+(run.reason||'');
+  if(readLocal(RUN_SEEN)===stamp){ el.hidden=true; return; }
+
+  var advice=runAdvice(run.reason);
+  $('runBannerBody').textContent=run.reason||'The search stopped without saying why.';
+  $('runBannerWhy').textContent=advice||
+    'The full log is under View runs in Settings.';
+  el.hidden=false;
+  el.setAttribute('data-stamp',stamp);
 }
 
 /** One line at the top of the list, so a dead board is noticed, not scrolled past. */
@@ -2069,6 +2129,11 @@ $('revertCompaniesBtn').addEventListener('click',revertCompanies);
 $('companyUrl').addEventListener('keydown',function(e){
   if(e.key==='Enter'){ e.preventDefault(); addCompany(); }
 });
+$('runBannerDismiss').addEventListener('click',function(){
+  writeLocal(RUN_SEEN,$('runBanner').getAttribute('data-stamp')||'');
+  $('runBanner').hidden=true;
+});
+
 $('companyList').addEventListener('click',function(e){
   var fix=e.target.closest('[data-fix]');
   if(fix){ repairCompany(Number(fix.getAttribute('data-fix'))); return; }

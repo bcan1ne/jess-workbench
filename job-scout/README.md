@@ -18,7 +18,7 @@ GitHub Actions (weekly cron)
        ├─ src/search.js   → Anthropic Messages API with the web_search tool
        ├─ src/parse.js    → text blocks out of the response, fences stripped
        ├─ src/merge.js    → dedupe on url, append new, never touch existing
-       ├─ commits boards.json (how each watched board answered — always)
+       ├─ commits boards.json (per-board results + why the run ended — always)
        └─ commits jobs.json (only when something new turned up)
 
 GitHub Pages
@@ -37,7 +37,7 @@ error text before it can reach a log line.
 |---|---|
 | `config.json` | Every search setting. Editing this is the only way to change the search. |
 | `companies.json` | The employer watchlist, editable in Settings, polled directly from Greenhouse, Lever, Ashby, and Workday. |
-| `boards.json` | How each watched board answered on the last run. Written by the workflow, read by Settings to flag a board that has gone dead. |
+| `boards.json` | How each watched board answered on the last run, and why that run ended as it did. Written by the workflow, read by the board and Settings. |
 | `jobs.json` | The board. Appended to by the workflow, never rewritten. |
 | `locals.json` | Hand-curated nearby employers. The workflow does not touch it. |
 | `statuses.json` | Committed statuses, written from the dashboard and shared by every browser. |
@@ -75,6 +75,18 @@ the same by-name lookup used to add a company and repoints the entry in place.
 The slug is always parsed out of the URL the lookup says it found, never taken
 from the model's word for it. An invented slug would poll a dead board every
 week without ever announcing itself, which is the failure this exists to end.
+
+### When a run fails
+
+`refresh.js` records its own outcome into `boards.json` before it exits, so a
+failed run commits the reason it failed alongside whatever board results it had
+already gathered. The dashboard reads that and says it — "The Anthropic API key
+was rejected (401)", with the fix underneath — instead of "the run finished as
+failure", which is a dead end for anyone not about to go and read a workflow log.
+
+The reason is redacted with the same scrubber `search.js` uses before it is
+written, because it can contain an API error body and the repository is public.
+A test asserts the key never reaches the file.
 
 ### Adding a company
 
