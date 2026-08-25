@@ -66,8 +66,9 @@ In **Settings → Companies to keep an eye on**, either:
   needs the Anthropic key, and it always shows the board it found so you can
   check it is the right company — similar names are common.
 - **Paste a link to any job there.** Instant, and needs no key: the ATS and the
-  employer's slug are both sitting in that link. Greenhouse, Lever and Ashby are
-  recognised, including the `eu.` hosts and Greenhouse's embedded-board form.
+  employer's slug are both sitting in that link. Greenhouse, Lever, Ashby and
+  Workday are recognised, including the `eu.` Greenhouse and Lever hosts and
+  Greenhouse's embedded-board form.
 
 Looking up by name never trusts the model's word for the slug. It is parsed out
 of the URL the model says it found, through the same parser a pasted link goes
@@ -75,9 +76,33 @@ through — an invented slug would otherwise poll a dead board every week withou
 ever announcing itself. A URL that is not one of the three is refused rather
 than saved.
 
-A company on some other system (Workday, iCIMS, a hand-rolled careers page)
-cannot be watched employer by employer, and says so. The weekly web search still
-covers them.
+A company on something else again (iCIMS, SmartRecruiters, a hand-rolled careers
+page) cannot be watched employer by employer, and says so. The weekly web search
+still covers them.
+
+### Workday
+
+Most health systems and large employers use Workday — Teladoc, UHS and Guthrie
+among them — so it is worth the extra handling it needs.
+
+A Workday board is per-tenant, so an entry carries the host as well as the site:
+
+```json
+{ "name": "Teladoc Health", "ats": "workday",
+  "host": "teladoc.wd503.myworkdayjobs.com", "board": "teladochealth_is_hiring" }
+```
+
+Two differences from the other three. The listing endpoint is a POST, and it
+returns titles without descriptions — so a Workday posting comes back marked for
+a second request, and only the ones that survive the title filter are worth
+making it for. A board with a hundred openings costs a handful of extra requests,
+not a hundred. A posting whose description cannot be read is dropped rather than
+scored on its title alone, which would invite the model to guess at the job.
+
+The endpoint shape could not be exercised against the live service from the
+development sandbox, whose egress is restricted. The fetcher reads field names
+defensively and a wrong guess shows up as `0 posting(s)` or an HTTP error in the
+run log for that one employer, never as a failed run.
 
 The guessed name is editable, because it is what shows in the board's Company
 column: `pomelohealth` guesses to "Pomelohealth", and only a person knows it

@@ -109,9 +109,9 @@ test('one dead board does not lose the rest of the run', async function () {
 });
 
 test('an unknown ats is reported rather than silently skipped', async function () {
-  var res = await S.fetchAll([{ name: 'X', ats: 'workday', board: 'x' }], ok({}));
+  var res = await S.fetchAll([{ name: 'X', ats: 'icims', board: 'x' }], ok({}));
   assert.strictEqual(res.postings.length, 0);
-  assert.match(res.failures[0].reason, /unknown ats: workday/);
+  assert.match(res.failures[0].reason, /unknown ats: icims/);
 });
 
 test('an empty company list is fine', async function () {
@@ -249,4 +249,130 @@ test('every ats in the shipped watchlist is one the workflow can actually poll',
     assert.ok(B.isKnownAts(c.ats), c.name + ' uses an unsupported ats: ' + c.ats);
     assert.ok(c.board && c.name, 'a watchlist entry is missing board or name');
   });
+});
+
+/* ---------------------------------------------------------------- Workday */
+
+test('a Workday board link yields host and site', function () {
+  assert.deepStrictEqual(
+    B.parseBoardUrl('https://teladoc.wd503.myworkdayjobs.com/teladochealth_is_hiring'),
+    { ats: 'workday', host: 'teladoc.wd503.myworkdayjobs.com', board: 'teladochealth_is_hiring' });
+});
+
+test('a locale segment is not mistaken for the site name', function () {
+  assert.deepStrictEqual(
+    B.parseBoardUrl('https://teladoc.wd503.myworkdayjobs.com/en-US/teladochealth_is_hiring'),
+    { ats: 'workday', host: 'teladoc.wd503.myworkdayjobs.com', board: 'teladochealth_is_hiring' });
+});
+
+test('a link to one Workday posting still identifies the board', function () {
+  var out = B.parseBoardUrl(
+    'https://teladoc.wd503.myworkdayjobs.com/en-US/teladochealth_is_hiring/job/Remote/Client-Success_R-1234');
+  assert.strictEqual(out.board, 'teladochealth_is_hiring');
+  assert.strictEqual(out.ats, 'workday');
+});
+
+test('the tenant is read off the host', function () {
+  assert.strictEqual(S.workdayTenant('teladoc.wd503.myworkdayjobs.com'), 'teladoc');
+  assert.strictEqual(S.workdayTenant(''), '');
+});
+
+test('a bare Workday host with no site is not a board', function () {
+  assert.strictEqual(B.parseBoardUrl('https://teladoc.wd503.myworkdayjobs.com/'), null);
+});
+
+test('boardUrl for Workday needs the host and gives a page a person can open', function () {
+  assert.strictEqual(
+    B.boardUrl({ ats: 'workday', host: 'teladoc.wd503.myworkdayjobs.com', board: 'site' }),
+    'https://teladoc.wd503.myworkdayjobs.com/en-US/site');
+  assert.strictEqual(B.boardUrl({ ats: 'workday', board: 'site' }), '',
+    'without a host there is nothing to point at');
+});
+
+test('the Workday list is a POST and normalises to the same shape', async function () {
+  var seen;
+  var out = await S.fetchWorkday(
+    { name: 'Teladoc', ats: 'workday', host: 'teladoc.wd503.myworkdayjobs.com', board: 'tdh' },
+    function (url, opts) {
+      seen = { url: url, method: opts.method, body: JSON.parse(opts.body) };
+      return ok({ total: 1, jobPostings: [{
+        title: 'Client Success Manager', externalPath: '/job/Remote/CSM_R-1',
+        locationsText: 'Remote, USA', postedOn: 'Posted 3 Days Ago'
+      }] })();
+    });
+  assert.strictEqual(seen.url,
+    'https://teladoc.wd503.myworkdayjobs.com/wday/cxs/teladoc/tdh/jobs');
+  assert.strictEqual(seen.method, 'POST');
+  assert.deepStrictEqual(seen.body, { appliedFacets: {}, limit: 20, offset: 0, searchText: '' });
+  assert.strictEqual(out[0].url,
+    'https://teladoc.wd503.myworkdayjobs.com/en-US/tdh/job/Remote/CSM_R-1');
+  assert.strictEqual(out[0].description, '', 'the list carries no description');
+  assert.ok(out[0].detail, 'but it carries enough to go and get one');
+});
+
+test('a Workday entry missing its host fails loudly rather than polling nothing', async function () {
+  await assert.rejects(
+    S.fetchWorkday({ name: 'X', ats: 'workday', board: 'site' }, ok({})),
+    /needs both host and board/);
+});
+
+test('a posting with no path is dropped rather than given a broken url', async function () {
+  var out = await S.fetchWorkday(
+    { name: 'X', host: 'x.wd1.myworkdayjobs.com', board: 's' },
+    ok({ jobPostings: [{ title: 'No path' }, { title: 'Fine', externalPath: '/job/a' }] }));
+  assert.strictEqual(out.length, 1);
+  assert.strictEqual(out[0].title, 'Fine');
+});
+
+/* -------------------------------------------------------------- hydration */
+
+test('hydration fills the description in from the detail endpoint', async function () {
+  var out = await S.hydrate([{
+    company: 'Teladoc', title: 'CSM', url: 'https://x/1', description: '',
+    detail: 'https://teladoc.wd503.myworkdayjobs.com/wday/cxs/teladoc/tdh/job/Remote/CSM_R-1'
+  }], ok({ jobPostingInfo: {
+    jobDescription: '&lt;p&gt;Own enterprise accounts. $120,000-$150,000.&lt;/p&gt;',
+    location: 'Remote, USA'
+  } }));
+  assert.match(out[0].description, /Own enterprise accounts/);
+  assert.ok(out[0].description.indexOf('<') === -1, 'markup is stripped');
+});
+
+test('postings that already have a description are left alone and cost no request', async function () {
+  var calls = 0;
+  var out = await S.hydrate(
+    [{ title: 'A', description: 'already here', detail: 'https://x' }, { title: 'B' }],
+    function () { calls++; return ok({})(); });
+  assert.strictEqual(calls, 0);
+  assert.strictEqual(out.length, 2);
+});
+
+test('a posting whose description cannot be read is dropped, not scored blind', async function () {
+  // Scoring a bare title invites the model to guess at what the role involves.
+  var logged = [];
+  var out = await S.hydrate(
+    [{ company: 'X', title: 'CSM', detail: 'https://x/1' }],
+    function () { return Promise.reject(new Error('ECONNRESET')); },
+    function (m) { logged.push(m); });
+  assert.strictEqual(out.length, 0);
+  assert.match(logged[0], /could not read X — CSM/);
+});
+
+test('one unreadable posting does not lose the others', async function () {
+  var n = 0;
+  var out = await S.hydrate([
+    { company: 'X', title: 'A', detail: 'https://x/1' },
+    { company: 'X', title: 'B', detail: 'https://x/2' }
+  ], function () {
+    n++;
+    if (n === 1) return Promise.reject(new Error('boom'));
+    return ok({ jobPostingInfo: { jobDescription: 'Fine.' } })();
+  });
+  assert.strictEqual(out.length, 1);
+  assert.strictEqual(out[0].title, 'B');
+});
+
+test('workday is an ats the watchlist recognises', function () {
+  assert.ok(B.isKnownAts('workday'));
+  assert.strictEqual(B.label('workday'), 'Workday');
 });

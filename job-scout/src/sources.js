@@ -99,10 +99,96 @@ async function fetchAshby(company, fetchImpl) {
   });
 }
 
+/**
+ * Workday, which most health systems and large employers use.
+ *
+ * Its board is backed by a per-tenant JSON endpoint. Two differences from the
+ * others: the list is a POST, and it carries no job description — so postings
+ * come back marked for hydration, and only the ones that survive the title
+ * filter are worth a second request.
+ */
+function workdayTenant(host) {
+  return String(host || '').split('.')[0];
+}
+
+async function fetchWorkday(company, fetchImpl) {
+  var doFetch = fetchImpl || globalThis.fetch;
+  var host = company.host;
+  var site = company.board;
+  if (!host || !site) throw new Error('needs both host and board');
+
+  var base = 'https://' + host + '/wday/cxs/' + workdayTenant(host) + '/' + site;
+  var res = await doFetch(base + '/jobs', {
+    method: 'POST',
+    headers: { 'accept': 'application/json', 'content-type': 'application/json', 'user-agent': UA },
+    body: JSON.stringify({ appliedFacets: {}, limit: 20, offset: 0, searchText: '' })
+  });
+  if (!res.ok) {
+    var err = new Error('HTTP ' + res.status);
+    err.status = res.status;
+    throw err;
+  }
+
+  var data = await res.json();
+  return (data.jobPostings || []).map(function (j) {
+    var external = pick(j, ['externalPath', 'externalUrl'], '');
+    return {
+      company: company.name,
+      title: pick(j, ['title']),
+      // The human-facing address, not the API one.
+      url: external ? 'https://' + host + '/en-US/' + site + external : '',
+      location: pick(j, ['locationsText', 'locations', 'location']),
+      postedAt: pick(j, ['postedOn', 'startDate'], ''),
+      description: '',
+      // Enough to go back for the description if this one is worth scoring.
+      detail: external ? base + external : ''
+    };
+  }).filter(function (p) { return p.url; });
+}
+
+/** Second request, for a posting that already looks plausible. */
+async function hydrateWorkday(posting, fetchImpl) {
+  var doFetch = fetchImpl || globalThis.fetch;
+  var res = await doFetch(posting.detail, {
+    headers: { 'accept': 'application/json', 'user-agent': UA }
+  });
+  if (!res.ok) return posting;
+
+  var data = await res.json();
+  var info = data.jobPostingInfo || data;
+  return Object.assign({}, posting, {
+    description: toText(pick(info, ['jobDescription', 'description'])),
+    location: posting.location || pick(info, ['location', 'locationsText']),
+    postedAt: posting.postedAt || pick(info, ['postedOn', 'startDate'], '')
+  });
+}
+
+/**
+ * Fills in descriptions for postings that arrived without one. Runs after the
+ * title filter, so a board with a hundred openings costs a handful of requests
+ * rather than a hundred.
+ */
+async function hydrate(postings, fetchImpl, log) {
+  var out = [];
+  for (var i = 0; i < (postings || []).length; i++) {
+    var p = postings[i];
+    if (!p.detail || p.description) { out.push(p); continue; }
+    try {
+      out.push(await hydrateWorkday(p, fetchImpl));
+    } catch (err) {
+      // Scoring a title with no description is worse than nothing, so drop it
+      // rather than let the model guess at what the role involves.
+      if (log) log('  could not read ' + p.company + ' — ' + p.title + ': ' + err.message);
+    }
+  }
+  return out;
+}
+
 var FETCHERS = {
   greenhouse: fetchGreenhouse,
   lever: fetchLever,
-  ashby: fetchAshby
+  ashby: fetchAshby,
+  workday: fetchWorkday
 };
 
 /**
@@ -174,9 +260,13 @@ function prefilter(postings, cfg, seenUrls) {
 module.exports = {
   toText: toText,
   pick: pick,
+  workdayTenant: workdayTenant,
   fetchGreenhouse: fetchGreenhouse,
   fetchLever: fetchLever,
   fetchAshby: fetchAshby,
+  fetchWorkday: fetchWorkday,
+  hydrateWorkday: hydrateWorkday,
+  hydrate: hydrate,
   fetchAll: fetchAll,
   prefilter: prefilter
 };

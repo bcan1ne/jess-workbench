@@ -17,8 +17,16 @@
   var ATS = {
     greenhouse: { label: 'Greenhouse' },
     lever: { label: 'Lever' },
-    ashby: { label: 'Ashby' }
+    ashby: { label: 'Ashby' },
+    workday: { label: 'Workday' }
   };
+
+  /* Workday is per-tenant, so an entry needs the host as well as the site name:
+     https://teladoc.wd503.myworkdayjobs.com/en-US/teladochealth_is_hiring
+             └──── host ─────────────────────┘        └──── site ────┘
+     Locale segments sit between the two and are not part of either. */
+  var WORKDAY_HOST = /^([a-z0-9-]+)\.(wd\d+)\.myworkdayjobs\.com$/i;
+  var LOCALE = /^[a-z]{2}(-[A-Za-z]{2,4})?$/;
 
   /* Host patterns, each capturing the employer slug as the first path segment.
      The eu. variants are real and easy to miss. */
@@ -52,6 +60,16 @@
       if (forParam) return { ats: 'greenhouse', board: forParam };
     }
 
+    if (WORKDAY_HOST.test(url.hostname)) {
+      var segs = String(url.pathname || '').split('/').filter(Boolean)
+        .filter(function (s) { return !LOCALE.test(s); });
+      // Anything from /job/ onward is one posting, not the board.
+      var jobAt = segs.indexOf('job');
+      if (jobAt !== -1) segs = segs.slice(0, jobAt);
+      if (!segs.length) return null;
+      return { ats: 'workday', host: url.hostname.toLowerCase(), board: segs[0] };
+    }
+
     for (var i = 0; i < PATTERNS.length; i++) {
       if (!PATTERNS[i].host.test(url.hostname)) continue;
       var board = firstSegment(url.pathname);
@@ -75,6 +93,9 @@
     if (company.ats === 'greenhouse') return 'https://job-boards.greenhouse.io/' + company.board;
     if (company.ats === 'lever') return 'https://jobs.lever.co/' + company.board;
     if (company.ats === 'ashby') return 'https://jobs.ashbyhq.com/' + company.board;
+    if (company.ats === 'workday' && company.host) {
+      return 'https://' + company.host + '/en-US/' + company.board;
+    }
     return '';
   }
 

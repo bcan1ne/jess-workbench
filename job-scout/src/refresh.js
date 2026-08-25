@@ -12,7 +12,7 @@ var path = require('path');
 var { parseResponse } = require('./parse');
 var { mergeJobs, existingUrls } = require('./merge');
 var { searchJobs } = require('./search');
-var { fetchAll, prefilter } = require('./sources');
+var { fetchAll, prefilter, hydrate } = require('./sources');
 var { batches, scoreBatch, keepKnownUrls } = require('./score');
 
 var ROOT = path.join(__dirname, '..');
@@ -67,7 +67,16 @@ async function main() {
     var gate = prefilter(polled.postings, cfg, seen);
     console.log(gate.kept.length + ' past the title filter, ' + gate.dropped + ' dropped.');
 
-    for (var group of batches(gate.kept)) {
+    // Some boards list titles without descriptions. Fetch those now, after the
+    // filter, so a big board costs a few requests rather than one per opening.
+    var needing = gate.kept.filter(function (p) { return p.detail && !p.description; }).length;
+    if (needing) console.log('Reading ' + needing + ' full description(s)…');
+    var ready = await hydrate(gate.kept, null, console.log);
+    if (ready.length !== gate.kept.length) {
+      console.log((gate.kept.length - ready.length) + ' dropped — description unreadable.');
+    }
+
+    for (var group of batches(ready)) {
       var scoredRaw = parseResponse(await scoreBatch(apiKey, cfg, group));
       var scored = keepKnownUrls(scoredRaw, group);
       if (scored.length !== scoredRaw.length) {

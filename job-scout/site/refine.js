@@ -195,17 +195,20 @@
 
   function buildFindPrompt(company) {
     return 'Find the job board for this employer: ' + company + '\n\n' +
-      'Search the web for it. Most digital-health companies host their openings on ' +
-      'Greenhouse, Lever or Ashby, at addresses that look like:\n' +
+      'Search the web for it. Employers host their openings on one of these, at ' +
+      'addresses that look like:\n' +
       '  https://job-boards.greenhouse.io/<slug>\n' +
       '  https://jobs.lever.co/<slug>\n' +
-      '  https://jobs.ashbyhq.com/<slug>\n\n' +
+      '  https://jobs.ashbyhq.com/<slug>\n' +
+      '  https://<name>.wd<N>.myworkdayjobs.com/<site>   (health systems and large employers)\n\n' +
       'RULES:\n' +
       '- Return the real address you found. Never assemble one from the company name; ' +
         'if you did not actually see it, set found to false.\n' +
       '- Make sure it is the right company. Similar names are common.\n' +
-      '- If they host their own careers page instead of using one of those three, set ' +
-        'found to false and say which system they appear to use in note.\n\n' +
+      '- Workday boards are often linked from a careers page rather than advertised; ' +
+        'follow that link and give the myworkdayjobs.com address itself.\n' +
+        '- If they use none of those, set found to false and say which system they appear ' +
+        'to use in note.\n\n' +
       'Return ONLY a JSON object, no prose and no markdown fences:\n' +
       '{"found": true, "boardUrl": "", "name": "<the company\'s proper name>", "note": ""}';
   }

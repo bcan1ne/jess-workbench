@@ -195,9 +195,9 @@ function load(){
     $('tableView').hidden=false;
     render(); renderLocals(); fillSettings();
     loadCompanies();
-    // The published statuses.json lags a Pages deploy behind. With a token,
-    // re-read the committed file directly so every browser agrees right away.
-    return syncStatuses();
+    // The published copies lag a Pages deploy behind. With a token, re-read the
+    // committed files directly so every browser agrees as soon as it opens.
+    return syncFromRepo();
   }).catch(function(err){
     $('skeleton').hidden=true;
     $('tableView').hidden=false;
@@ -592,6 +592,41 @@ function syncStatuses(){
     });
     render(); fillExport();
   },function(){ /* offline or no access — the published copy still renders */ });
+}
+
+/**
+ * Everything committed is shared between browsers, but the published copies are
+ * a Pages deploy behind — so a setting changed on the laptop would not reach the
+ * phone for a minute or two, and not at all if that deploy failed. With a token
+ * we can read the committed files directly, which makes the three of them agree
+ * as soon as the page opens.
+ *
+ * Silent on failure: a board showing the published copy is still a working board.
+ */
+function syncFromRepo(){
+  var token=readToken();
+  var slug=repoSlug();
+  if(!token||!slug) return Promise.resolve();
+
+  var GH=window.JobScoutGitHub;
+
+  var settings=GH.readJsonFile(token,slug,CONFIG_PATH,DATA.branch).then(function(cur){
+    if(!cur.data||typeof cur.data!=='object'||Array.isArray(cur.data)) return;
+    // Do not stamp on edits she is part-way through typing.
+    if($('panel').classList.contains('open')) return;
+    DATA.config=cur.data;
+    fillSettings();
+    render(); renderLocals();
+  },function(){ /* published copy stands */ });
+
+  var watchlist=GH.readJsonFile(token,slug,COMPANIES_PATH,DATA.branch).then(function(cur){
+    if(!Array.isArray(cur.data)) return;
+    if($('panel').classList.contains('open')) return;
+    DATA.companies=cur.data;
+    renderCompanies();
+  },function(){ /* published copy stands */ });
+
+  return Promise.all([syncStatuses(),settings,watchlist]);
 }
 
 /* ------------------------------------------------------------- locals */
@@ -1019,6 +1054,13 @@ function companyAddState(msg,bad){
   el.hidden=!msg;
 }
 
+/** Workday is per-tenant, so its entries carry the host as well as the site. */
+function entryFor(found,name){
+  var e={ name:name, ats:found.ats, board:found.board };
+  if(found.host) e.host=found.host;
+  return e;
+}
+
 /** Puts one company on the list, unless it is already there. */
 function pushCompany(entry){
   var already=(DATA.companies||[]).filter(function(c){
@@ -1049,9 +1091,7 @@ function addCompany(){
 
   var found=B.parseBoardUrl(raw);
   if(found){
-    if(pushCompany({ name:B.guessName(found.board), ats:found.ats, board:found.board })){
-      field.value='';
-    }
+    if(pushCompany(entryFor(found,B.guessName(found.board)))){ field.value=''; }
     return;
   }
 
@@ -1087,7 +1127,7 @@ function lookUpCompany(name){
       companyAddState(out.note,true);
       return;
     }
-    if(pushCompany({ name:out.name, ats:out.ats, board:out.board })){
+    if(pushCompany(entryFor(out,out.name))){
       $('companyUrl').value='';
       companyAddState('Found '+out.name+' on '+B.label(out.ats)+
         ' — check the link in the list is right, then Save the list.');
@@ -1120,7 +1160,9 @@ function saveCompanies(){
   var token=readToken();
   var slug=repoSlug();
   var list=(DATA.companies||[]).filter(function(c){
-    return c&&c.board&&window.JobScoutBoards.isKnownAts(c.ats);
+    if(!c||!c.board||!window.JobScoutBoards.isKnownAts(c.ats)) return false;
+    // A Workday entry without its host cannot be polled at all.
+    return c.ats!=='workday'||!!c.host;
   });
 
   if(!token||!slug){
@@ -1264,6 +1306,7 @@ function renderSuggestions(out,url){
         ', so every search could check them directly. '+
         '<button class="linkish ui" id="watchThisBtn" type="button" '+
         'data-ats="'+esc(found.ats)+'" data-board="'+esc(found.board)+'" '+
+        (found.host?'data-host="'+esc(found.host)+'" ':'')+
         'data-name="'+esc(role.company||B.guessName(found.board))+'">Add them to the watchlist</button></p>';
     }
   }
@@ -1301,9 +1344,10 @@ function applySuggestions(){
 
 function watchThisEmployer(btn){
   var name=btn.getAttribute('data-name');
-  DATA.companies=(DATA.companies||[]).concat([{
-    name:name, ats:btn.getAttribute('data-ats'), board:btn.getAttribute('data-board')
-  }]);
+  var e={ name:name, ats:btn.getAttribute('data-ats'), board:btn.getAttribute('data-board') };
+  var host=btn.getAttribute('data-host');
+  if(host) e.host=host;
+  DATA.companies=(DATA.companies||[]).concat([e]);
   renderCompanies();
   btn.parentNode.innerHTML='Added '+esc(name)+
     ' to the watchlist — press <b>Save the list</b> above to keep it.';
@@ -1630,7 +1674,7 @@ function saveToken(){
   fillTokenState();
   toast('Token saved.');
   var slug=repoSlug();
-  if(slug) branchOf(v,slug).then(syncStatuses,function(){ /* reported on first use */ });
+  if(slug) branchOf(v,slug).then(syncFromRepo,function(){ /* reported on first use */ });
 }
 
 function clearToken(){
@@ -1802,7 +1846,7 @@ function applyPastedSetupLink(){
   bannerError('');
   toast('Done — this browser is set up.');
   if(repoSlug()&&readToken()){
-    branchOf(readToken(),repoSlug()).then(syncStatuses,function(){ /* reported on use */ });
+    branchOf(readToken(),repoSlug()).then(syncFromRepo,function(){ /* reported on use */ });
   }
 }
 
