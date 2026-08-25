@@ -470,12 +470,15 @@
   /* ---------------------------------------------------------- companies */
   .complist{list-style:none;margin:14px 0 12px;padding:0;border:1px solid var(--line);border-radius:3px;background:var(--card);}
   .complist li{
-    display:flex;align-items:center;gap:10px;
+    display:flex;align-items:center;gap:10px;flex-wrap:wrap;
     padding:8px 10px;border-bottom:1px solid var(--line);font-size:13.5px;
   }
   .complist li:last-child{border-bottom:none;}
+  /* Never squeezed to nothing by a long slug and a repair button: the name is
+     the only part of the row she can recognise a company by. */
   .complist .nm{
-    flex:1;min-width:0;font-family:'Archivo',sans-serif;font-size:13.5px;color:var(--ink);
+    flex:1 1 150px;min-width:130px;
+    font-family:'Archivo',sans-serif;font-size:13.5px;color:var(--ink);
     background:transparent;border:1px solid transparent;border-radius:3px;padding:4px 6px;
   }
   .complist .nm:hover{border-color:var(--line);}
@@ -492,6 +495,34 @@
   }
   .complist .drop:hover{color:var(--tag-low);background:rgba(0,0,0,.05);}
   .complist .none{color:var(--ink-faint);font-style:italic;}
+  .complist .rowend{
+    display:flex;align-items:center;gap:8px;margin-left:auto;
+  }
+  /* A board that has stopped answering. Marked rather than left to be inferred
+     from a search that quietly returns nothing from it. */
+  .complist li.broken{background:rgba(179,58,58,.05);}
+  .complist .dead{
+    font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.06em;
+    text-transform:uppercase;color:var(--tag-low);white-space:nowrap;
+  }
+  .complist .live{
+    font-family:'IBM Plex Mono',monospace;font-size:10.5px;
+    color:var(--ink-faint);white-space:nowrap;
+  }
+  .complist .fix{
+    font-family:'Archivo',sans-serif;font-size:11.5px;white-space:nowrap;
+    background:var(--paper);border:1px solid var(--line-strong);border-radius:3px;
+    padding:3px 8px;cursor:pointer;color:var(--ink);
+  }
+  .complist .fix:hover{border-color:var(--tag-high);color:var(--tag-high);}
+  .deadnote{
+    font-family:'Archivo',sans-serif;font-size:12.5px;color:var(--ink-soft);
+    margin:0 0 12px;line-height:1.5;
+  }
+  @media (max-width:560px){
+    .complist .nm{flex:1 1 100%;}
+    .complist .rowend{margin-left:0;}
+  }
 
   /* ---------------------------------------------------------- qr */
   /* A link this long needs a 73-module code, and a camera needs roughly four
@@ -852,11 +883,12 @@
     <button class="panel-btn ui" id="addCompanyBtn" type="button">Add it</button>
 
     <ul class="complist" id="companyList"></ul>
+    <p class="deadnote" id="companySummary" hidden></p>
 
     <div class="keystate" id="companyState" hidden></div>
     <button class="panel-btn ui" id="saveCompaniesBtn" type="button">Save the list</button>
     <button class="panel-btn sub ui" id="revertCompaniesBtn" type="button">Undo changes</button>
-    <p class="hint" style="margin-top:13px;margin-bottom:0">Only Greenhouse, Lever and Ashby can be watched directly — most digital-health companies use one of them. If a company is not on any of the three, the weekly web search still covers them; they just are not checked employer by employer. Searching by name needs an Anthropic key, and always shows you the board it found so you can check it is the right company.</p>
+    <p class="hint" style="margin-top:13px;margin-bottom:0">Greenhouse, Lever, Ashby and Workday can be watched directly — most digital-health companies use one of them. If a company is not on any of the four, the weekly web search still covers them; they just are not checked employer by employer. Searching by name needs an Anthropic key, and always shows you the board it found so you can check it is the right company.</p>
   </div>
 
   <div class="group">

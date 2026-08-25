@@ -619,10 +619,20 @@ function syncFromRepo(){
     render(); renderLocals();
   },function(){ /* published copy stands */ });
 
-  var watchlist=GH.readJsonFile(token,slug,COMPANIES_PATH,DATA.branch).then(function(cur){
-    if(!Array.isArray(cur.data)) return;
+  // Health and the list it annotates are read together, so a repaired row is
+  // never shown against health recorded for the address it used to have.
+  var watchlist=Promise.all([
+    GH.readJsonFile(token,slug,COMPANIES_PATH,DATA.branch),
+    GH.readJsonFile(token,slug,BOARDS_PATH,DATA.branch).then(null,function(){
+      return { data:null };
+    })
+  ]).then(function(res){
     if($('panel').classList.contains('open')) return;
-    DATA.companies=cur.data;
+    if(Array.isArray(res[0].data)) DATA.companies=res[0].data;
+    if(res[1].data&&typeof res[1].data==='object'){
+      DATA.boards=res[1].data.boards||{};
+      DATA.boardsChecked=res[1].data.checked||'';
+    }
     renderCompanies();
   },function(){ /* published copy stands */ });
 
@@ -705,7 +715,11 @@ function doRefresh(){
     })
     .then(function(runId){
       if(runId==null){
-        throw new Error('The run did not appear. Check View runs in Settings.');
+        // GitHub took the dispatch, so the run exists; it just has not shown up
+        // in the run list yet. Saying it never appeared sends her looking for a
+        // problem that is not there.
+        throw new Error('GitHub started the search but it has not shown up in the run '+
+          'list yet. Open View runs in Settings to follow it.');
       }
       return GH.waitForCompletion(token,slug,runId);
     })
@@ -1011,12 +1025,30 @@ function dismissBanner(){
 /* ----------------------------------------------------------- companies */
 
 var COMPANIES_PATH='job-scout/companies.json';
+var BOARDS_PATH='job-scout/boards.json';
 
 function loadCompanies(){
-  return getJson('companies.json',[]).then(function(list){
-    DATA.companies=Array.isArray(list)?list:[];
+  return Promise.all([
+    getJson('companies.json',[]),
+    getJson('boards.json',{})
+  ]).then(function(res){
+    DATA.companies=Array.isArray(res[0])?res[0]:[];
+    DATA.boards=(res[1]&&res[1].boards)||{};
+    DATA.boardsChecked=(res[1]&&res[1].checked)||'';
     renderCompanies();
   });
+}
+
+/**
+ * What the last search found when it asked this board for its openings.
+ *
+ * A board that has gone dead answers 404 and contributes nothing, which looks
+ * exactly like a board with no openings — so the answer is recorded by the run
+ * and shown here rather than left to be inferred from an empty result.
+ */
+function healthOf(company){
+  var key=window.JobScoutBoards.boardKey(company);
+  return (DATA.boards||{})[key]||null;
 }
 
 function renderCompanies(){
@@ -1026,6 +1058,7 @@ function renderCompanies(){
 
   if(!list.length){
     el.innerHTML='<li class="none">No companies yet — the search still covers the open web.</li>';
+    renderBoardSummary(0);
     return;
   }
 
@@ -1035,16 +1068,51 @@ function renderCompanies(){
     // The name is editable because it is what shows in the Company column on
     // the board — a slug like "pomelohealth" guesses to "Pomelohealth", and
     // only a person knows it should read "Pomelo Health".
-    return '<li>'+
-      '<label class="vh" for="cn'+i+'">Company name</label>'+
-      '<input class="nm" id="cn'+i+'" type="text" value="'+esc(name)+'" data-name="'+i+'">'+
+    var health=healthOf(c);
+    var dead=!!health&&health.ok===false;
+
+    var note='';
+    if(dead){
+      note='<span class="dead" title="'+esc(health.reason||'')+'">'+
+        'not answering'+
+      '</span>'+
+      '<button class="fix ui" type="button" data-fix="'+i+'" '+
+        'title="Search for this employer\u2019s current job board">Find it again</button>';
+    }else if(health){
+      note='<span class="live">'+health.postings+' open</span>';
+    }
+
+    return '<li'+(dead?' class="broken"':'')+'>'+
+      '<input class="nm" id="cn'+i+'" type="text" value="'+esc(name)+'" data-name="'+i+'" '+
+        'aria-label="Company name">'+
       '<span class="via">'+esc(B.label(c.ats))+' · '+
         (url?'<a href="'+esc(url)+'" target="_blank" rel="noopener" title="Open this job board">'+esc(c.board)+'</a>':esc(c.board))+
       '</span>'+
-      '<button class="drop ui" type="button" data-drop="'+i+'" '+
-        'aria-label="Remove '+esc(name)+'" title="Remove">×</button>'+
+      // Status and buttons travel together, so a narrow panel drops them onto a
+      // second line as a unit instead of stranding the remove button alone.
+      '<span class="rowend">'+note+
+        '<button class="drop ui" type="button" data-drop="'+i+'" '+
+          'aria-label="Remove '+esc(name)+'" title="Remove">×</button>'+
+      '</span>'+
     '</li>';
   }).join('');
+
+  renderBoardSummary(list.filter(function(c){
+    var h=healthOf(c);
+    return !!h&&h.ok===false;
+  }).length);
+}
+
+/** One line at the top of the list, so a dead board is noticed, not scrolled past. */
+function renderBoardSummary(dead){
+  var el=$('companySummary');
+  if(!dead){ el.hidden=true; el.textContent=''; return; }
+  el.hidden=false;
+  el.innerHTML='<b>'+dead+' '+(dead===1?'board is':'boards are')+' not answering.</b> '+
+    'Those companies contributed nothing to the last search'+
+    (DATA.boardsChecked?' on '+esc(DATA.boardsChecked):'')+
+    '. Usually the company moved its job board — press <b>Find it again</b> on a '+
+    'row to look up where it went, then <b>Save the list</b>.';
 }
 
 function companyAddState(msg,bad){
@@ -1137,6 +1205,58 @@ function lookUpCompany(name){
   }).then(function(){
     FINDING=false;
     $('addCompanyBtn').disabled=false;
+  });
+}
+
+/**
+ * Re-finds the board for a row whose last poll failed, and swaps it in place.
+ *
+ * Boards move: a company renames its Greenhouse slug, or moves to Workday, and
+ * the watchlist entry keeps pointing at nothing. This is the same lookup that
+ * adds a company by name, aimed at a row that already exists — so repairing
+ * sixteen dead entries is sixteen presses rather than sixteen web searches
+ * done by hand.
+ */
+function repairCompany(i){
+  if(FINDING) return;
+  var list=DATA.companies||[];
+  var c=list[i];
+  if(!c) return;
+
+  var key=readLocal(ANTH_KEY);
+  if(!key){
+    companyState('To look a board up again this needs an Anthropic key — add one '+
+      'under Anthropic key below.',true);
+    return;
+  }
+
+  var name=c.name||window.JobScoutBoards.guessName(c.board);
+  FINDING=true;
+  companyState('Looking for '+name+"'s job board…");
+
+  var B=window.JobScoutBoards;
+  var R=window.JobScoutRefine;
+
+  R.findBoard(key,name,B.parseBoardUrl).then(function(out){
+    if(!out.found){
+      companyState('Could not find a board for '+name+'. '+(out.note||'')+
+        ' You can remove the row — the web search still covers them.',true);
+      return;
+    }
+    var entry=entryFor(out,name);
+    if(entry.ats===c.ats&&String(entry.board).toLowerCase()===String(c.board).toLowerCase()){
+      companyState('That is the same address as before, so the board really has '+
+        'gone. Remove the row — the web search still covers them.',true);
+      return;
+    }
+    DATA.companies=list.slice(0,i).concat([entry],list.slice(i+1));
+    renderCompanies();
+    companyState('Repointed '+name+' at '+B.label(entry.ats)+'/'+entry.board+
+      ' — check the link, then Save the list.');
+  },function(err){
+    companyState(R.redact(err.message||String(err),key),true);
+  }).then(function(){
+    FINDING=false;
   });
 }
 
@@ -1950,6 +2070,8 @@ $('companyUrl').addEventListener('keydown',function(e){
   if(e.key==='Enter'){ e.preventDefault(); addCompany(); }
 });
 $('companyList').addEventListener('click',function(e){
+  var fix=e.target.closest('[data-fix]');
+  if(fix){ repairCompany(Number(fix.getAttribute('data-fix'))); return; }
   var btn=e.target.closest('[data-drop]');
   if(btn) dropCompany(Number(btn.getAttribute('data-drop')));
 });

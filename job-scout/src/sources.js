@@ -198,21 +198,31 @@ var FETCHERS = {
 async function fetchAll(companies, fetchImpl, log) {
   var postings = [];
   var failures = [];
+  // One entry per company, whether it worked or not. A board that quietly 404s
+  // every week is indistinguishable from one with no openings unless the
+  // outcome is recorded, so the dashboard gets told rather than left guessing.
+  var results = [];
 
   for (var i = 0; i < (companies || []).length; i++) {
     var c = companies[i];
     var fn = FETCHERS[c.ats];
-    if (!fn) { failures.push({ company: c.name, reason: 'unknown ats: ' + c.ats }); continue; }
+    if (!fn) {
+      failures.push({ company: c.name, reason: 'unknown ats: ' + c.ats });
+      results.push({ company: c, ok: false, count: 0, reason: 'unknown ats: ' + c.ats });
+      continue;
+    }
     try {
       var got = await fn(c, fetchImpl);
       postings = postings.concat(got);
+      results.push({ company: c, ok: true, count: got.length, reason: '' });
       if (log) log('  ' + c.name + ': ' + got.length + ' posting(s)');
     } catch (err) {
       failures.push({ company: c.name, reason: err.message });
+      results.push({ company: c, ok: false, count: 0, reason: err.message });
       if (log) log('  ' + c.name + ': ' + err.message);
     }
   }
-  return { postings: postings, failures: failures };
+  return { postings: postings, failures: failures, results: results };
 }
 
 /* ----------------------------------------------------------- filtering */

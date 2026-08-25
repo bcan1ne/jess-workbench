@@ -115,8 +115,9 @@ test('an unknown ats is reported rather than silently skipped', async function (
 });
 
 test('an empty company list is fine', async function () {
-  assert.deepStrictEqual(await S.fetchAll([], ok({})), { postings: [], failures: [] });
-  assert.deepStrictEqual(await S.fetchAll(null, ok({})), { postings: [], failures: [] });
+  var empty = { postings: [], failures: [], results: [] };
+  assert.deepStrictEqual(await S.fetchAll([], ok({})), empty);
+  assert.deepStrictEqual(await S.fetchAll(null, ok({})), empty);
 });
 
 /* ------------------------------------------------------------ prefilter */
@@ -375,4 +376,46 @@ test('one unreadable posting does not lose the others', async function () {
 test('workday is an ats the watchlist recognises', function () {
   assert.ok(B.isKnownAts('workday'));
   assert.strictEqual(B.label('workday'), 'Workday');
+});
+
+/* ------------------------------------------------------- board health */
+
+test('fetchAll reports every board, not just the ones that failed — a dead board ' +
+     'and a board with no openings both return nothing', async function () {
+  var out = await S.fetchAll([
+    { name: 'Live Co', ats: 'greenhouse', board: 'liveco' },
+    { name: 'Gone Co', ats: 'greenhouse', board: 'goneco' },
+    { name: 'Odd Co', ats: 'notanats', board: 'oddco' }
+  ], function (url) {
+    if (url.indexOf('goneco') !== -1) {
+      return Promise.resolve({ ok: false, status: 404, json: function () { return Promise.resolve({}); } });
+    }
+    return Promise.resolve({
+      ok: true, status: 200,
+      json: function () {
+        return Promise.resolve({ jobs: [{ id: 1, title: 'A', absolute_url: 'https://x/1', content: 'c' }] });
+      }
+    });
+  });
+
+  assert.strictEqual(out.results.length, 3);
+  assert.deepStrictEqual(out.results.map(function (r) { return r.ok; }), [true, false, false]);
+  assert.strictEqual(out.results[0].count, 1);
+  assert.match(out.results[1].reason, /404/);
+  assert.match(out.results[2].reason, /unknown ats/);
+  // The old shape still holds for callers that only wanted the failures.
+  assert.strictEqual(out.failures.length, 2);
+});
+
+test('boardKey identifies a board by what is polled, not by the editable name', function () {
+  assert.strictEqual(B.boardKey({ name: 'Pomelo Care', ats: 'greenhouse', board: 'pomelocare' }),
+    'greenhouse:pomelocare');
+  // Renaming the row must not orphan its health.
+  assert.strictEqual(B.boardKey({ name: 'Renamed', ats: 'greenhouse', board: 'PomeloCare' }),
+    'greenhouse:pomelocare');
+  // Two Workday tenants can share a site name, so the host is part of it.
+  assert.notStrictEqual(
+    B.boardKey({ ats: 'workday', host: 'a.wd1.myworkdayjobs.com', board: 'careers' }),
+    B.boardKey({ ats: 'workday', host: 'b.wd5.myworkdayjobs.com', board: 'careers' }));
+  assert.strictEqual(B.boardKey({ ats: 'greenhouse' }), '');
 });

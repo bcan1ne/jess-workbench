@@ -43,6 +43,12 @@
   function ghFetch(token, path, init, fetchImpl) {
     var doFetch = fetchImpl || globalThis.fetch;
     var opts = Object.assign({}, init || {});
+    // GitHub answers with Cache-Control: private, max-age=60. Without this the
+    // browser serves the same response for a minute — which meant polling for a
+    // run that had just started kept seeing the run list from before it existed,
+    // and the dashboard reported that a run it had successfully started had
+    // never appeared.
+    opts.cache = 'no-store';
     opts.headers = Object.assign({
       'Accept': 'application/vnd.github+json',
       'X-GitHub-Api-Version': '2022-11-28',
@@ -98,7 +104,7 @@
   function waitForRun(token, slug, sinceId, opts) {
     var o = opts || {};
     var sleep = o.sleep || function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
-    var tries = o.tries == null ? 12 : o.tries;
+    var tries = o.tries == null ? 20 : o.tries;
     var interval = o.interval == null ? 2500 : o.interval;
 
     function attempt(n) {

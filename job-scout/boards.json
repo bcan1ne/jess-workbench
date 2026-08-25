@@ -1,0 +1,137 @@
+{
+  "checked": "2026-08-25",
+  "boards": {
+    "greenhouse:mavenclinic": {
+      "name": "Maven Clinic",
+      "ok": true,
+      "postings": 29,
+      "reason": ""
+    },
+    "greenhouse:progyny": {
+      "name": "Progyny",
+      "ok": false,
+      "postings": 0,
+      "reason": "HTTP 404"
+    },
+    "greenhouse:carrotfertility": {
+      "name": "Carrot Fertility",
+      "ok": true,
+      "postings": 19,
+      "reason": ""
+    },
+    "greenhouse:oviahealth": {
+      "name": "Ovia Health",
+      "ok": false,
+      "postings": 0,
+      "reason": "HTTP 404"
+    },
+    "greenhouse:cleo": {
+      "name": "Cleo",
+      "ok": true,
+      "postings": 4,
+      "reason": ""
+    },
+    "greenhouse:pomelocare": {
+      "name": "Pomelo Care",
+      "ok": true,
+      "postings": 54,
+      "reason": ""
+    },
+    "greenhouse:includedhealth": {
+      "name": "Included Health",
+      "ok": false,
+      "postings": 0,
+      "reason": "HTTP 404"
+    },
+    "greenhouse:garnerhealth": {
+      "name": "Garner Health",
+      "ok": true,
+      "postings": 81,
+      "reason": ""
+    },
+    "greenhouse:headway": {
+      "name": "Headway",
+      "ok": false,
+      "postings": 0,
+      "reason": "HTTP 404"
+    },
+    "greenhouse:cedar": {
+      "name": "Cedar",
+      "ok": false,
+      "postings": 0,
+      "reason": "HTTP 404"
+    },
+    "greenhouse:arcadia": {
+      "name": "Arcadia",
+      "ok": false,
+      "postings": 0,
+      "reason": "HTTP 404"
+    },
+    "greenhouse:springhealth": {
+      "name": "Spring Health",
+      "ok": false,
+      "postings": 0,
+      "reason": "HTTP 404"
+    },
+    "greenhouse:lyrahealth": {
+      "name": "Lyra Health",
+      "ok": false,
+      "postings": 0,
+      "reason": "HTTP 404"
+    },
+    "greenhouse:omadahealth": {
+      "name": "Omada Health",
+      "ok": true,
+      "postings": 27,
+      "reason": ""
+    },
+    "greenhouse:hingehealth": {
+      "name": "Hinge Health",
+      "ok": false,
+      "postings": 0,
+      "reason": "HTTP 404"
+    },
+    "greenhouse:virtahealth": {
+      "name": "Virta Health",
+      "ok": false,
+      "postings": 0,
+      "reason": "HTTP 404"
+    },
+    "greenhouse:transcarent": {
+      "name": "Transcarent",
+      "ok": false,
+      "postings": 0,
+      "reason": "HTTP 404"
+    },
+    "greenhouse:accolade": {
+      "name": "Accolade",
+      "ok": false,
+      "postings": 0,
+      "reason": "HTTP 404"
+    },
+    "greenhouse:growtherapy": {
+      "name": "Grow Therapy",
+      "ok": false,
+      "postings": 0,
+      "reason": "HTTP 404"
+    },
+    "greenhouse:alma": {
+      "name": "Alma",
+      "ok": false,
+      "postings": 0,
+      "reason": "HTTP 404"
+    },
+    "greenhouse:quantumhealth": {
+      "name": "Quantum Health",
+      "ok": false,
+      "postings": 0,
+      "reason": "HTTP 404"
+    },
+    "lever:rightwayhealthcare": {
+      "name": "Rightway",
+      "ok": false,
+      "postings": 0,
+      "reason": "HTTP 404"
+    }
+  }
+}

@@ -18,11 +18,12 @@ GitHub Actions (weekly cron)
        ├─ src/search.js   → Anthropic Messages API with the web_search tool
        ├─ src/parse.js    → text blocks out of the response, fences stripped
        ├─ src/merge.js    → dedupe on url, append new, never touch existing
+       ├─ commits boards.json (how each watched board answered — always)
        └─ commits jobs.json (only when something new turned up)
 
 GitHub Pages
   └─ site/index.html + site/app.js
-       └─ fetch config.json, jobs.json, locals.json, statuses.json
+       └─ fetch config.json, jobs.json, locals.json, statuses.json, boards.json
 ```
 
 **The API key never reaches the browser.** Every call happens inside the Actions
@@ -35,7 +36,8 @@ error text before it can reach a log line.
 | Path | What it is |
 |---|---|
 | `config.json` | Every search setting. Editing this is the only way to change the search. |
-| `companies.json` | The employer watchlist, editable in Settings, polled directly from Greenhouse, Lever, and Ashby. |
+| `companies.json` | The employer watchlist, editable in Settings, polled directly from Greenhouse, Lever, Ashby, and Workday. |
+| `boards.json` | How each watched board answered on the last run. Written by the workflow, read by Settings to flag a board that has gone dead. |
 | `jobs.json` | The board. Appended to by the workflow, never rewritten. |
 | `locals.json` | Hand-curated nearby employers. The workflow does not touch it. |
 | `statuses.json` | Committed statuses, written from the dashboard and shared by every browser. |
@@ -48,8 +50,8 @@ error text before it can reach a log line.
 Two sources, deliberately different in kind.
 
 **Company boards** (`companies.json`). A watchlist of employers polled straight
-from their applicant-tracking system — Greenhouse, Lever, and Ashby all publish
-free JSON with no auth. This is exhaustive for the companies on it: a role that
+from their applicant-tracking system — Greenhouse, Lever, Ashby, and Workday all
+publish free JSON with no auth. This is exhaustive for the companies on it: a role that
 sits open for three weeks cannot be missed because one week's search happened
 not to return it. Every URL is the employer's own, so nothing can be invented.
 
@@ -57,6 +59,22 @@ not to return it. Every URL is the employer's own, so nothing can be invented.
 non-exhaustive and capped per run.
 
 The two complement each other: search discovers, the watchlist watches.
+
+### When a board goes dead
+
+A company that renames its Greenhouse slug, or moves to Workday, leaves a
+watchlist entry pointing at a 404. Polled weekly, that board contributes nothing
+— and it looks exactly like a board with no openings, so nothing announces it.
+
+So every run records what each board actually answered into `boards.json`, and
+commits it whether the rest of the run succeeded or not — the run that first
+revealed sixteen dead boards was itself a failed run. Settings reads that file
+and marks the row **not answering**, with a **Find it again** button that runs
+the same by-name lookup used to add a company and repoints the entry in place.
+
+The slug is always parsed out of the URL the lookup says it found, never taken
+from the model's word for it. An invented slug would poll a dead board every
+week without ever announcing itself, which is the failure this exists to end.
 
 ### Adding a company
 

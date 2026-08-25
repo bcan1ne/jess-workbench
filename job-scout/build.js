@@ -17,7 +17,12 @@ var http = require('http');
 var ROOT = __dirname;
 var SITE = path.join(ROOT, 'site');
 var OUT = path.join(ROOT, '_site');
-var DATA = ['config.json', 'companies.json', 'jobs.json', 'locals.json', 'statuses.json'];
+var DATA = ['config.json', 'companies.json', 'jobs.json', 'locals.json',
+            'statuses.json', 'boards.json'];
+
+/* Files a run produces rather than a person writes. Absent on a fresh clone,
+   so they stage as empty rather than failing the build. */
+var GENERATED = { 'statuses.json': '{}\n', 'boards.json': '{"boards":{}}\n' };
 
 var TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -36,8 +41,8 @@ function build() {
     var src = path.join(ROOT, f);
     if (fs.existsSync(src)) {
       fs.copyFileSync(src, path.join(OUT, f));
-    } else if (f === 'statuses.json') {
-      fs.writeFileSync(path.join(OUT, f), '{}\n');
+    } else if (GENERATED[f]) {
+      fs.writeFileSync(path.join(OUT, f), GENERATED[f]);
     } else {
       throw new Error('Missing required data file: ' + f);
     }

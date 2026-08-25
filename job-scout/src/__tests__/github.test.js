@@ -35,6 +35,16 @@ test('every request carries the auth and api-version headers', async function ()
   assert.strictEqual(seen.headers.Accept, 'application/vnd.github+json');
 });
 
+test('reads bypass the browser cache — GitHub sends max-age=60 on run lists, which ' +
+     'made a freshly started run look like it had never appeared', async function () {
+  var seen;
+  await GH.latestRunId(TOKEN, SLUG, function (url, opts) {
+    seen = opts;
+    return res(200, { workflow_runs: [{ id: 5 }] });
+  });
+  assert.strictEqual(seen.cache, 'no-store');
+});
+
 test('a 204 resolves rather than trying to parse a body', async function () {
   var out = await GH.dispatch(TOKEN, SLUG, 'main', function () {
     return Promise.resolve({

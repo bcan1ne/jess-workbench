@@ -103,6 +103,19 @@
     return (ATS[ats] && ATS[ats].label) || ats || '';
   }
 
+  /**
+   * A stable identity for one watched board, so the health a run recorded can be
+   * matched back to the row in the watchlist. Keyed on what is actually polled
+   * rather than the display name, which she can rename at will. Workday takes
+   * the host too — two tenants can use the same site name.
+   */
+  function boardKey(company) {
+    if (!company || !company.ats || !company.board) return '';
+    var host = company.ats === 'workday' && company.host
+      ? String(company.host).toLowerCase() + '/' : '';
+    return company.ats + ':' + host + String(company.board).toLowerCase();
+  }
+
   function isKnownAts(ats) {
     return Object.prototype.hasOwnProperty.call(ATS, ats);
   }
@@ -112,6 +125,7 @@
     parseBoardUrl: parseBoardUrl,
     guessName: guessName,
     boardUrl: boardUrl,
+    boardKey: boardKey,
     label: label,
     isKnownAts: isKnownAts
   };

@@ -52,6 +52,22 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: node job-scout/src/refresh.js
 
+      # Separate from the listings commit, and unconditional: the run that first
+      # showed a board had gone dead was itself a failed run, so this has to
+      # survive the search failing or she never sees it.
+      - name: Commit board health
+        if: always()
+        run: |
+          if git diff --quiet -- job-scout/boards.json; then
+            echo "boards.json is unchanged — nothing to commit."
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add job-scout/boards.json
+          git commit -m "Job Scout: record which company boards answered"
+          git push origin HEAD:${{ github.ref_name }}
+
       - name: Commit new listings
         if: steps.refresh.outputs.added != '0'
         run: |

@@ -14,11 +14,13 @@ var { mergeJobs, existingUrls } = require('./merge');
 var { searchJobs } = require('./search');
 var { fetchAll, prefilter, hydrate } = require('./sources');
 var { batches, scoreBatch, keepKnownUrls } = require('./score');
+var { boardKey } = require('../site/boards');
 
 var ROOT = path.join(__dirname, '..');
 var CONFIG_PATH = path.join(ROOT, 'config.json');
 var JOBS_PATH = path.join(ROOT, 'jobs.json');
 var COMPANIES_PATH = path.join(ROOT, 'companies.json');
+var BOARDS_PATH = path.join(ROOT, 'boards.json');
 
 function readJson(file, fallback) {
   if (!fs.existsSync(file)) {
@@ -34,6 +36,30 @@ function readJson(file, fallback) {
 
 function today() {
   return new Date().toISOString().slice(0, 10);
+}
+
+/**
+ * Records how each watched board answered, so the dashboard can show a row as
+ * broken instead of silently contributing nothing week after week.
+ *
+ * Written the moment polling finishes, before anything that can fail — the run
+ * that first revealed sixteen dead boards was itself a failed run, and health
+ * she cannot see is health she cannot act on.
+ */
+function writeBoardHealth(results) {
+  var boards = {};
+  (results || []).forEach(function (r) {
+    var key = boardKey(r.company);
+    if (!key) return;
+    boards[key] = {
+      name: r.company.name || r.company.board,
+      ok: r.ok,
+      postings: r.count,
+      reason: r.reason || ''
+    };
+  });
+  fs.writeFileSync(BOARDS_PATH,
+    JSON.stringify({ checked: today(), boards: boards }, null, 2) + '\n');
 }
 
 function setOutput(key, value) {
@@ -63,6 +89,7 @@ async function main() {
     var polled = await fetchAll(companies, null, console.log);
     console.log(polled.postings.length + ' posting(s) total, ' +
       polled.failures.length + ' board(s) unreachable.');
+    writeBoardHealth(polled.results);
 
     var gate = prefilter(polled.postings, cfg, seen);
     console.log(gate.kept.length + ' past the title filter, ' + gate.dropped + ' dropped.');
