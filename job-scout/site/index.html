@@ -175,6 +175,129 @@
   .saved.bad{color:var(--tag-low);}
   @media (prefers-reduced-motion:reduce){.saved{transition:none;}}
 
+  /* ---------------------------------------------------------- rail controls */
+  .seg{display:flex;border:1px solid rgba(255,255,255,.18);border-radius:3px;overflow:hidden;}
+  .seg button{
+    flex:1;background:transparent;border:none;cursor:pointer;
+    font-family:'Archivo',sans-serif;font-size:12.5px;font-weight:600;
+    color:#b8ccc5;padding:8px 6px;transition:background .15s,color .15s;
+  }
+  .seg button:hover{background:rgba(255,255,255,.07);color:#fff;}
+  .seg button[aria-pressed="true"]{background:#e8eeeb;color:var(--rail-deep);}
+
+  .search{
+    width:100%;font-family:'Archivo',sans-serif;font-size:13px;color:#e8eeeb;
+    background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.18);
+    border-radius:3px;padding:8px 10px;
+  }
+  .search::placeholder{color:#7ea699;}
+  .search:focus{outline:2px solid #e8eeeb;outline-offset:1px;}
+
+  .checks{display:flex;flex-direction:column;gap:1px;}
+  .check{
+    display:flex;align-items:center;gap:9px;cursor:pointer;
+    font-family:'Archivo',sans-serif;font-size:13px;color:#b8ccc5;
+    padding:6px 10px;border-radius:3px;border-left:2px solid transparent;
+  }
+  .check:hover{background:rgba(255,255,255,.06);color:#fff;}
+  .check input{accent-color:var(--tag-high);width:13px;height:13px;margin:0;cursor:pointer;}
+  .check.on{color:#fff;border-left-color:var(--tag-high);background:rgba(255,255,255,.07);}
+  .check .n{margin-left:auto;font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#7ea699;}
+
+  .clearfilters{
+    background:none;border:none;cursor:pointer;padding:6px 10px;text-align:left;
+    font-family:'Archivo',sans-serif;font-size:12px;color:#7ea699;text-decoration:underline;
+  }
+  .clearfilters:hover{color:#fff;}
+
+  /* ---------------------------------------------------------- table view */
+  .tablewrap{border:1px solid var(--line);border-radius:2px;background:var(--card);}
+  /* A scroll container only where it is needed — otherwise it would trap the
+     sticky header inside a box that never scrolls. */
+  @media(max-width:1080px){ .tablewrap{overflow-x:auto;} }
+
+  table.board{width:100%;border-collapse:collapse;table-layout:fixed;min-width:880px;}
+  table.board th{
+    font-family:'Archivo',sans-serif;font-size:9.5px;font-weight:600;
+    letter-spacing:.13em;text-transform:uppercase;color:var(--ink-faint);
+    text-align:left;padding:0;background:#f5f2ec;border-bottom:1px solid var(--line);
+    position:sticky;top:0;z-index:2;
+  }
+  table.board th button{
+    width:100%;background:none;border:none;cursor:pointer;text-align:inherit;
+    font:inherit;letter-spacing:inherit;text-transform:inherit;color:inherit;
+    padding:9px 10px;display:flex;align-items:center;gap:5px;
+  }
+  table.board th button:hover{color:var(--ink);}
+  table.board th[aria-sort] button{color:var(--rail);}
+  table.board th .dir{font-family:'IBM Plex Mono',monospace;font-size:10px;}
+  table.board th.plain{padding:9px 10px;}
+
+  /* Fixed widths keep every row one line tall; the full text lives in the
+     expanded note, and each truncated cell carries a title attribute. */
+  table.board col.c-fit{width:46px;}
+  table.board col.c-company{width:126px;}
+  table.board col.c-role{width:auto;}
+  table.board col.c-salary{width:112px;}
+  table.board col.c-setup{width:88px;}
+  table.board col.c-drive{width:66px;}
+  table.board col.c-posted{width:104px;}
+  table.board col.c-status{width:164px;}
+
+  table.board td{
+    padding:6px 10px;border-bottom:1px solid var(--line);
+    font-size:14px;vertical-align:middle;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  table.board td select{padding:3px 6px;font-size:12px;}
+  /* The saved flag is opacity-0 between writes but still takes layout space,
+     which was squeezing the select and tripping the cell's ellipsis. */
+  /* Wide enough for the select plus the saved flag, so the cell never has to
+     overflow — letting it escape widened the whole page on mobile. */
+  table.board td.statuscell .wrap{display:flex;align-items:center;gap:6px;}
+  table.board td.statuscell .saved{white-space:nowrap;pointer-events:none;}
+  table.board tr.row:hover td{background:#faf8f4;}
+  table.board tr.row.open td{background:#f5f2ec;}
+  table.board tr.row:last-of-type td{border-bottom:none;}
+
+  .fitcell{
+    font-family:'IBM Plex Mono',monospace;font-size:14px;font-weight:600;
+    color:var(--tone);border-left:3px solid var(--tone);padding-left:8px;
+    display:inline-block;line-height:1.3;
+  }
+  .rowbtn{
+    background:none;border:none;padding:0;cursor:pointer;text-align:left;
+    font-family:'Archivo',sans-serif;font-size:13.5px;font-weight:600;color:var(--ink);
+    display:flex;align-items:baseline;gap:6px;width:100%;
+  }
+  .rowbtn .txt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .rowlink{
+    font-family:'Archivo',sans-serif;font-size:11px;font-weight:600;
+    text-decoration:none;color:var(--ink-faint);white-space:nowrap;
+  }
+  .rowlink:hover{color:var(--tag-high);}
+  .rowbtn:hover{color:var(--tag-high);}
+  .rowbtn .chev{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--ink-faint);transition:transform .15s;}
+  .rowbtn[aria-expanded="true"] .chev{transform:rotate(90deg);}
+  @media (prefers-reduced-motion:reduce){.rowbtn .chev{transition:none;}}
+  .cell-mono{font-family:'IBM Plex Mono',monospace;font-size:12.5px;white-space:nowrap;}
+  .cell-mono.warn{color:var(--tag-low);}
+  .cell-mono.good{color:var(--tag-high);}
+  .cell-co{font-family:'Archivo',sans-serif;font-size:13px;color:var(--ink-soft);}
+
+  tr.detail td{
+    background:#faf8f4;padding:2px 12px 16px 46px;border-bottom:1px solid var(--line);
+    white-space:normal;overflow:visible;
+  }
+  tr.detail .inner{max-width:80ch;}
+  tr.detail .why{font-size:14.5px;margin:6px 0 9px;}
+  tr.detail .watch{font-size:13.5px;}
+  tr.detail .actions{margin-top:12px;}
+  tr.detail .meta{
+    display:flex;flex-wrap:wrap;gap:4px 18px;margin:0 0 4px;
+    font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--ink-faint);
+  }
+
   /* ---------------------------------------------------------- local */
   .local{margin-top:14px;border:1px solid var(--line);border-radius:2px;overflow:hidden;}
   .local table{width:100%;border-collapse:collapse;background:var(--card);}
@@ -266,7 +389,10 @@
   @keyframes sh{to{background-position:-200% 0;}}
   @media (prefers-reduced-motion:reduce){.skeleton{animation:none;}}
 
-  .vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);}
+  .vh{
+    position:absolute;width:1px;height:1px;padding:0;margin:-1px;
+    overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap;border:0;
+  }
   :focus-visible{outline:2px solid var(--focus);outline-offset:2px;}
   .rail :focus-visible{outline-color:#e8eeeb;}
 
@@ -279,6 +405,7 @@
     .gauge{flex-basis:62px;}
     .local{overflow-x:auto;}
     .local table{min-width:620px;}
+    table.board th{position:static;}
   }
 </style>
 </head>
@@ -297,8 +424,28 @@
     </div>
 
     <div>
+      <div class="rail-label">View</div>
+      <div class="seg" id="viewToggle" role="group" aria-label="Board layout">
+        <button type="button" data-view="cards" aria-pressed="true">Cards</button>
+        <button type="button" data-view="table" aria-pressed="false">Table</button>
+      </div>
+    </div>
+
+    <div>
+      <div class="rail-label">Find</div>
+      <label class="vh" for="search">Search listings</label>
+      <input class="search" id="search" type="search" placeholder="Company, title, keyword…" autocomplete="off">
+    </div>
+
+    <div>
       <div class="rail-label">Show</div>
       <div class="filters" id="filters"></div>
+    </div>
+
+    <div>
+      <div class="rail-label">Only</div>
+      <div class="checks" id="onlyFilters"></div>
+      <button class="clearfilters ui" id="clearFilters" type="button" hidden>Clear all filters</button>
     </div>
 
     <div class="rail-foot" id="railFoot">Loading…</div>
@@ -313,6 +460,26 @@
 
     <div id="board" aria-live="polite">
       <div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>
+    </div>
+
+    <div id="tableView" hidden>
+      <div class="band-head">
+        <h2>All listings</h2>
+        <span class="desc">Click a title to open the full note</span>
+        <span class="count mono" id="tableCount"></span>
+      </div>
+      <div class="tablewrap">
+        <table class="board">
+          <colgroup>
+            <col class="c-fit"><col class="c-company"><col class="c-role">
+            <col class="c-salary"><col class="c-setup"><col class="c-drive">
+            <col class="c-posted"><col class="c-status">
+          </colgroup>
+          <thead><tr id="tableHead"></tr></thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
+      <div id="tableEmpty"></div>
     </div>
 
     <div id="localWrap" style="display:none">

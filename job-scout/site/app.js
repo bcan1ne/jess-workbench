@@ -13,6 +13,12 @@
 var DATA = { jobs: [], rawJobs: [], locals: [], config: {}, committedStatuses: {}, branch: null };
 var FILTER = 'all';
 var STORE_KEY = 'jobScout.statuses.v1';
+var VIEW_KEY = 'jobScout.view.v1';
+var VIEW = 'cards';
+var QUERY = '';
+var SORT = { key: 'fit', dir: 'desc' };
+var EXPANDED = {};
+var ONLY = { remote: false, clears: false, radius: false };
 var TOKEN_KEY = 'jobScout.ghToken.v1';
 var REFRESHING = false;
 var lastFocus = null;
@@ -170,7 +176,7 @@ function load(){
       return copy;
     });
     wireLinks();
-    renderFilters(); renderBoard(); renderLocals(); fillSettings();
+    render(); renderLocals(); fillSettings();
     // The published statuses.json lags a Pages deploy behind. With a token,
     // re-read the committed file directly so every browser agrees right away.
     return syncStatuses();
@@ -183,37 +189,184 @@ function load(){
 
 /* ------------------------------------------------------------ filters */
 
-function renderFilters(){
-  var counts={all:DATA.jobs.length};
-  STATUSES.forEach(function(s){
-    counts[s]=DATA.jobs.filter(function(j){return j.status===s;}).length;
+/** Everything except the status filter, so the status counts stay meaningful. */
+function jobsBeforeStatusFilter(){
+  return DATA.jobs.filter(function(j){
+    if(!matchesQuery(j)) return false;
+    if(ONLY.remote&&!isRemote(j)) return false;
+    if(ONLY.clears&&!clearsFloor(j)) return false;
+    if(ONLY.radius&&!withinRadius(j)) return false;
+    return true;
   });
+}
+
+function renderFilters(){
+  var pool=jobsBeforeStatusFilter();
+  var counts={all:pool.length};
+  STATUSES.forEach(function(st){
+    counts[st]=pool.filter(function(j){return j.status===st;}).length;
+  });
+
   var opts=[{k:'all',t:'Everything'}].concat(
-    STATUSES.filter(function(s){return counts[s]>0||s==='Not started';})
-            .map(function(s){return {k:s,t:s};}));
+    STATUSES.filter(function(st){return counts[st]>0||st==='Not started'||FILTER===st;})
+            .map(function(st){return {k:st,t:st};}));
   $('filters').innerHTML=opts.map(function(o){
     return '<button class="chip" type="button" aria-pressed="'+(FILTER===o.k)+
       '" data-filter="'+esc(o.k)+'">'+esc(o.t)+
       '<span class="n">'+(counts[o.k]||0)+'</span></button>';
   }).join('');
 
-  var n=DATA.jobs.filter(function(j){return j.fit>=8;}).length;
-  $('railFoot').textContent=DATA.jobs.length+' listings tracked · '+n+' in the top band';
+  renderOnly();
+
+  $('clearFilters').hidden=!filtersActive();
+
+  var shown=visibleJobs().length;
+  var top=DATA.jobs.filter(function(j){return j.fit>=8;}).length;
+  $('railFoot').textContent = filtersActive()
+    ? shown+' of '+DATA.jobs.length+' listings shown'
+    : DATA.jobs.length+' listings tracked · '+top+' in the top band';
 }
 
-function setFilter(k){ FILTER=k; renderFilters(); renderBoard(); }
+/** Counts show what each toggle would leave, given the others already on. */
+function renderOnly(){
+  var defs=[
+    { key:'remote', label:'Remote',            test:isRemote },
+    { key:'clears', label:'Clears salary floor', test:clearsFloor },
+    { key:'radius', label:'Within radius',     test:withinRadius }
+  ];
+  $('onlyFilters').innerHTML=defs.map(function(d){
+    var n=DATA.jobs.filter(function(j){
+      if(FILTER!=='all'&&j.status!==FILTER) return false;
+      if(!matchesQuery(j)) return false;
+      var others=defs.every(function(o){
+        return o.key===d.key||!ONLY[o.key]||o.test(j);
+      });
+      return others&&d.test(j);
+    }).length;
+    return '<label class="check'+(ONLY[d.key]?' on':'')+'">'+
+      '<input type="checkbox" data-only="'+d.key+'"'+(ONLY[d.key]?' checked':'')+'>'+
+      esc(d.label)+'<span class="n">'+n+'</span></label>';
+  }).join('');
+}
+
+function setFilter(k){ FILTER=k; render(); }
+
+function setQuery(q){ QUERY=q.trim(); render(); }
+
+function setOnly(key,on){ ONLY[key]=!!on; render(); }
+
+function clearAllFilters(){
+  FILTER='all'; QUERY=''; ONLY={remote:false,clears:false,radius:false};
+  $('search').value='';
+  render();
+}
+
+/* ------------------------------------------------------------ filtering */
+
+function bandFor(job){
+  for(var i=0;i<BANDS.length;i++) if(BANDS[i].test(job)) return BANDS[i];
+  return BANDS[BANDS.length-1];
+}
+
+function matchesQuery(job){
+  if(!QUERY) return true;
+  var hay=[job.company,job.title,job.industry,job.location,job.why,job.watchOuts,job.setup]
+    .join(' ').toLowerCase();
+  // every word must appear somewhere, so "maven remote" narrows rather than widens
+  return QUERY.toLowerCase().split(/\s+/).filter(Boolean)
+    .every(function(w){ return hay.indexOf(w)!==-1; });
+}
+
+function isRemote(job){ return /remote/i.test(job.setup||'')||/remote/i.test(job.location||''); }
+function clearsFloor(job){ return job.salaryMin!=null&&job.salaryMin>=DATA.config.minSalary; }
+function withinRadius(job){
+  var d=drivingMiles(job.lat,job.lon,DATA.config);
+  return d==null||d<=DATA.config.radius;
+}
+
+/** The one list both views render, so they never disagree. */
+function visibleJobs(){
+  return DATA.jobs.filter(function(j){
+    if(FILTER!=='all'&&j.status!==FILTER) return false;
+    if(!matchesQuery(j)) return false;
+    if(ONLY.remote&&!isRemote(j)) return false;
+    if(ONLY.clears&&!clearsFloor(j)) return false;
+    if(ONLY.radius&&!withinRadius(j)) return false;
+    return true;
+  });
+}
+
+function filtersActive(){
+  return FILTER!=='all'||!!QUERY||ONLY.remote||ONLY.clears||ONLY.radius;
+}
+
+/* -------------------------------------------------------------- sorting */
+
+var COLUMNS = [
+  { key:'fit',      label:'Fit',     sort:function(j){ return j.fit||0; } },
+  { key:'company',  label:'Company', sort:function(j){ return (j.company||'').toLowerCase(); } },
+  { key:'title',    label:'Role',    sort:function(j){ return (j.title||'').toLowerCase(); } },
+  { key:'salary',   label:'Salary',  sort:function(j){ return j.salaryMin==null?-Infinity:j.salaryMin; } },
+  { key:'setup',    label:'Setup',   sort:function(j){ return (j.setup||'').toLowerCase(); } },
+  // Remote sorts as no commute at all, which is what she is optimising for.
+  { key:'drive',    label:'Drive',   sort:function(j){
+      var d=drivingMiles(j.lat,j.lon,DATA.config); return d==null?-1:d; } },
+  { key:'posted',   label:'Posted',  sort:function(j){ return j.firstSeen||''; },
+    hint:'Sorts by when the listing was first seen' },
+  { key:'status',   label:'Status',  sort:function(j){ return STATUSES.indexOf(j.status); } }
+];
+
+function columnFor(key){
+  for(var i=0;i<COLUMNS.length;i++) if(COLUMNS[i].key===key) return COLUMNS[i];
+  return COLUMNS[0];
+}
+
+function sortJobs(jobs){
+  var col=columnFor(SORT.key);
+  var dir=SORT.dir==='asc'?1:-1;
+  return jobs.slice().sort(function(a,b){
+    var va=col.sort(a), vb=col.sort(b);
+    if(va<vb) return -1*dir;
+    if(va>vb) return 1*dir;
+    // Fit breaks every other tie, so equal rows stay in triage order.
+    return (b.fit||0)-(a.fit||0);
+  });
+}
+
+function setSort(key){
+  if(SORT.key===key){
+    SORT.dir=SORT.dir==='asc'?'desc':'asc';
+  }else{
+    SORT.key=key;
+    // Numbers read best highest-first; text reads best A-Z.
+    SORT.dir=(key==='company'||key==='title'||key==='setup')?'asc':'desc';
+  }
+  renderTable();
+}
 
 /* -------------------------------------------------------------- board */
 
+function emptyMessage(){
+  if(!DATA.jobs.length){
+    return '<div class="empty"><h3>Nothing here yet</h3><p>No listings on the board yet. '+
+      'Use Refresh listings in the sidebar to start one.</p></div>';
+  }
+  return '<div class="empty"><h3>No matches</h3><p>Nothing fits the current filters. '+
+    'Clear them in the sidebar to see all '+DATA.jobs.length+' listings.</p></div>';
+}
+
+/** Re-renders whichever view is showing, plus the counts around it. */
+function render(){
+  renderFilters();
+  if(VIEW==='table') renderTable(); else renderBoard();
+}
+
 function renderBoard(){
-  var jobs=DATA.jobs.filter(function(j){return FILTER==='all'||j.status===FILTER;});
+  var jobs=visibleJobs();
   var el=$('board');
 
   if(!jobs.length){
-    el.innerHTML='<div class="empty"><h3>Nothing here yet</h3><p>'+
-      (DATA.jobs.length?'No listings under this filter. Choose Everything to see the full board.'
-                       :'No listings on the board yet. Use Run a search in the sidebar to start one.')+
-      '</p></div>';
+    el.innerHTML=emptyMessage();
     return;
   }
 
@@ -248,8 +401,8 @@ function card(j,band,i){
   }).join('');
 
   var selId='st'+i;
-  var sel='<label class="vh" for="'+selId+'">Status for '+esc(j.title)+' at '+esc(j.company)+'</label>'+
-    '<select id="'+selId+'" data-url="'+esc(j.url)+'">'+
+  var sel='<select id="'+selId+'" data-url="'+esc(j.url)+
+    '" aria-label="Status for '+esc(j.title)+' at '+esc(j.company)+'">'+
     STATUSES.map(function(s){
       return '<option'+(s===j.status?' selected':'')+'>'+esc(s)+'</option>';
     }).join('')+'</select>';
@@ -287,13 +440,160 @@ function flashSaved(sel,text,bad){
  * on every other browser. Without a token there is nothing to sync to, so it
  * falls back to this browser only and says so.
  */
+/* -------------------------------------------------------------- table */
+
+/** "$100,000 - $156,000" -> "$100k–156k". Full text stays in the note. */
+function shortSalary(job){
+  var t=job.salary||'';
+  var m=t.match(/\$\s*([\d,]+)\s*[-–—to]+\s*\$\s*([\d,]+)/i);
+  var k=function(n){
+    var v=Number(String(n).replace(/,/g,''));
+    if(!v) return null;
+    return '$'+(v>=1000?Math.round(v/1000)+'k':v);
+  };
+  if(m&&k(m[1])&&k(m[2])) return k(m[1])+'–'+String(k(m[2])).replace('$','');
+  var one=t.match(/\$\s*([\d,]+)/);
+  if(one&&k(one[1])) return k(one[1]);
+  return t?'—':'—';
+}
+
+/**
+ * "Reposted 11 hours ago" -> "11h ago ↻". The recency is the useful part, so
+ * truncation must not eat it. Full text stays in the tooltip and the note.
+ */
+function shortPosted(job){
+  var t=(job.posted||'').trim();
+  if(!t) return '—';
+  if(/undated|verify/i.test(t)) return 'undated';
+  if(/within the last day|today/i.test(t)) return '<1d ago';
+
+  var re=/^(re)?posted\s*/i;
+  var again=/^reposted/i.test(t);
+  var rest=t.replace(re,'').trim();
+
+  var m=rest.match(/^~?\s*([\d.]+)\s*(hour|day|week|month|year)s?\s*ago/i);
+  if(m){
+    var unit={hour:'h',day:'d',week:'w',month:'mo',year:'y'}[m[2].toLowerCase()];
+    return (/^~/.test(rest)?'~':'')+m[1]+unit+' ago'+(again?' ↻':'');
+  }
+  return rest+(again?' ↻':'');
+}
+
+/** Long setup strings collapse to the token that matters for scanning. */
+function shortSetup(job){
+  var t=(job.setup||'')+' '+(job.location||'');
+  if(/hybrid/i.test(t)) return /remote/i.test(job.setup||'')?'Remote/Hyb':'Hybrid';
+  if(/remote/i.test(t)) return 'Remote';
+  if(/on-?site|in-?office/i.test(t)) return 'On-site';
+  return job.setup||'—';
+}
+
+function renderTable(){
+  var jobs=sortJobs(visibleJobs());
+  $('tableCount').textContent=jobs.length+(jobs.length===1?' listing':' listings');
+
+  $('tableHead').innerHTML=COLUMNS.map(function(c){
+    var active=SORT.key===c.key;
+    var dir=active?(SORT.dir==='asc'?'ascending':'descending'):null;
+    var arrow=active?(SORT.dir==='asc'?'↑':'↓'):'';
+    return '<th scope="col"'+(dir?' aria-sort="'+dir+'"':'')+'>'+
+      '<button type="button" data-sort="'+c.key+'"'+
+      (c.hint?' title="'+esc(c.hint)+'"':'')+'>'+esc(c.label)+
+      '<span class="dir" aria-hidden="true">'+arrow+'</span></button></th>';
+  }).join('');
+
+  if(!jobs.length){
+    $('tableBody').innerHTML='';
+    $('tableEmpty').innerHTML=emptyMessage();
+    return;
+  }
+  $('tableEmpty').innerHTML='';
+
+  $('tableBody').innerHTML=jobs.map(function(j,i){
+    return tableRow(j,i);
+  }).join('');
+}
+
+function tableRow(j,i){
+  var band=bandFor(j);
+  var open=!!EXPANDED[j.url];
+  var id='det'+i;
+  var check=salaryCheck(j);
+  var salCls = check==='Below floor' ? ' warn' : check==='Clears floor' ? ' good' : '';
+  var selId='tst'+i;
+
+  var row='<tr class="row'+(open?' open':'')+'" style="--tone:'+band.tone+'">'+
+    '<td><span class="fitcell">'+esc(j.fit)+'</span></td>'+
+    '<td class="cell-co" title="'+esc(j.company)+'">'+esc(j.company)+'</td>'+
+    '<td><button class="rowbtn" type="button" data-toggle="'+esc(j.url)+'" '+
+      'aria-expanded="'+open+'" aria-controls="'+id+'" title="'+esc(j.title)+'">'+
+      '<span class="chev" aria-hidden="true">▸</span>'+
+      '<span class="txt">'+esc(j.title)+'</span></button></td>'+
+    '<td class="cell-mono'+salCls+'" title="'+esc(j.salary||'Not posted')+'">'+esc(shortSalary(j))+'</td>'+
+    '<td class="cell-mono" title="'+esc(j.setup||'')+'">'+esc(shortSetup(j))+'</td>'+
+    '<td class="cell-mono" title="'+esc(distanceLabel(j))+'">'+
+      esc(distanceLabel(j)==='Remote'?'—':distanceLabel(j))+'</td>'+
+    '<td class="cell-mono" title="'+esc(j.posted||'')+'">'+esc(shortPosted(j))+'</td>'+
+    '<td class="statuscell"><div class="wrap">'+
+      '<select id="'+selId+'" data-url="'+esc(j.url)+
+        '" aria-label="Status for '+esc(j.title)+' at '+esc(j.company)+'">'+
+        STATUSES.map(function(st){
+          return '<option'+(st===j.status?' selected':'')+'>'+esc(st)+'</option>';
+        }).join('')+'</select>'+
+      '<span class="saved mono" role="status">saved</span>'+
+    '</div></td>'+
+  '</tr>';
+
+  var detail='<tr class="detail" id="'+id+'"'+(open?'':' hidden')+'><td colspan="8"><div class="inner">'+
+    '<p class="meta"><span>'+esc(j.salary||'Salary not posted')+'</span>'+
+      '<span>'+esc(j.setup||'—')+'</span>'+
+      '<span>'+esc(j.location||'—')+'</span>'+
+      (j.industry?'<span>'+esc(j.industry)+'</span>':'')+
+      '<span>'+esc(check)+'</span>'+
+      '<span>'+esc(inRadius(j))+'</span>'+
+      (j.firstSeen?'<span>first seen '+esc(j.firstSeen)+'</span>':'')+'</p>'+
+    (j.why?'<p class="why">'+esc(j.why)+'</p>':'')+
+    (j.watchOuts?'<p class="watch"><b>Before you apply</b>'+esc(j.watchOuts)+'</p>':'')+
+    (j.url?'<div class="actions"><a class="open" href="'+esc(j.url)+
+      '" target="_blank" rel="noopener">Open listing ↗</a></div>':'')+
+  '</div></td></tr>';
+
+  return row+detail;
+}
+
+function toggleRow(url){
+  EXPANDED[url]=!EXPANDED[url];
+  renderTable();
+}
+
+function setView(v){
+  VIEW=v;
+  try{ localStorage.setItem(VIEW_KEY,v); }catch(err){ /* preference only */ }
+  $('board').hidden = v==='table';
+  $('tableView').hidden = v!=='table';
+  $('lede').textContent = v==='table'
+    ? 'Every listing in one place. Sort by any column, and open a title to read the full note.'
+    : 'Listings are grouped by how closely they match the résumé. Work top down — the first band is where the odds are best.';
+  Array.prototype.forEach.call($('viewToggle').querySelectorAll('button'),function(b){
+    b.setAttribute('aria-pressed', String(b.getAttribute('data-view')===v));
+  });
+  render();
+}
+
 function setStatus(url,val,sel){
   var prev=DATA.committedStatuses[url];
   var j=DATA.jobs.filter(function(x){return x.url===url;})[0];
   if(j) j.status=val;
   DATA.committedStatuses[url]=val;
+
+  // Counts only. A full render would replace the <select> she is still holding,
+  // taking the focus and the saving indicator with it.
   renderFilters();
   fillExport();
+
+  // The row only has to leave when a status filter no longer matches it, and
+  // even then not until the write settles.
+  var dropsOut=FILTER!=='all'&&val!==FILTER;
 
   var map=readStore();
   map[url]=val;
@@ -302,7 +602,8 @@ function setStatus(url,val,sel){
   var token=readToken();
   var slug=repoSlug();
   if(!token||!slug){
-    flashSaved(sel,'this browser only');
+    flashSaved(sel,'local only');
+    if(dropsOut) setTimeout(render,1400);
     return;
   }
 
@@ -315,11 +616,12 @@ function setStatus(url,val,sel){
       message:'Job Scout: mark '+(j?j.company+' — '+j.title:url)+' as '+val
     }).then(function(){
       flashSaved(sel,'saved');
+      if(dropsOut) setTimeout(render,1400);
     },function(err){
       // Put it back rather than showing a status the repository does not have.
       if(prev==null) delete DATA.committedStatuses[url]; else DATA.committedStatuses[url]=prev;
       if(j) j.status=statusFor(j);
-      renderFilters(); renderBoard(); fillExport();
+      render(); fillExport();
       toast(GH.redact(err.message||String(err),token),true);
     });
   });
@@ -344,7 +646,7 @@ function syncStatuses(){
       copy.status=statusFor(j);
       return copy;
     });
-    renderFilters(); renderBoard(); fillExport();
+    render(); fillExport();
   },function(){ /* offline or no access — the published copy still renders */ });
 }
 
@@ -467,7 +769,7 @@ function awaitNewListings(){
           copy.status=statusFor(j);
           return copy;
         });
-        renderFilters(); renderBoard();
+        render();
         toast(added+(added===1?' new listing':' new listings')+' added.');
         return;
       }
@@ -577,7 +879,7 @@ function selectFallback(box){
 function clearStatuses(){
   try{ localStorage.removeItem(STORE_KEY); }catch(err){ /* nothing to clear */ }
   DATA.jobs.forEach(function(j){ j.status=statusFor(j); });
-  renderFilters(); renderBoard(); fillExport();
+  render(); fillExport();
   toast('Local copy cleared. Committed statuses are untouched.');
   return syncStatuses();
 }
@@ -605,8 +907,56 @@ $('board').addEventListener('change',function(e){
   }
 });
 
+/* ------------------------------------------------------- view + filters */
+
+$('viewToggle').addEventListener('click',function(e){
+  var btn=e.target.closest('[data-view]');
+  if(btn) setView(btn.getAttribute('data-view'));
+});
+
+var searchTimer=null;
+$('search').addEventListener('input',function(e){
+  var v=e.target.value;
+  clearTimeout(searchTimer);
+  searchTimer=setTimeout(function(){ setQuery(v); },160);
+});
+
+$('search').addEventListener('keydown',function(e){
+  if(e.key==='Escape'&&e.target.value){
+    e.stopPropagation();
+    e.target.value='';
+    setQuery('');
+  }
+});
+
+$('onlyFilters').addEventListener('change',function(e){
+  var key=e.target.getAttribute('data-only');
+  if(key) setOnly(key,e.target.checked);
+});
+
+$('clearFilters').addEventListener('click',clearAllFilters);
+
+$('tableView').addEventListener('click',function(e){
+  var sortBtn=e.target.closest('[data-sort]');
+  if(sortBtn){ setSort(sortBtn.getAttribute('data-sort')); return; }
+  var toggle=e.target.closest('[data-toggle]');
+  if(toggle){ toggleRow(toggle.getAttribute('data-toggle')); }
+});
+
+$('tableView').addEventListener('change',function(e){
+  if(e.target.tagName==='SELECT'){
+    setStatus(e.target.getAttribute('data-url'),e.target.value,e.target);
+  }
+});
+
 document.addEventListener('keydown',function(e){
   if(e.key==='Escape'&&$('panel').classList.contains('open')) closePanel();
 });
+
+try{
+  var saved=localStorage.getItem(VIEW_KEY);
+  if(saved==='table'||saved==='cards') VIEW=saved;
+}catch(err){ /* default to cards */ }
+setView(VIEW);
 
 load();
