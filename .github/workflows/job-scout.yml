@@ -103,7 +103,12 @@ jobs:
       - name: Stage the site
         run: node job-scout/build.js
 
+      # enablement turns Pages on for the repository if it is not already,
+      # rather than failing with "Get Pages site failed" until someone sets the
+      # source by hand. Needs a public repo or a paid plan, and pages: write.
       - uses: actions/configure-pages@v5
+        with:
+          enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: job-scout/_site
