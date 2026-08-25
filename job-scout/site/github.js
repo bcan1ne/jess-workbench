@@ -135,8 +135,102 @@
     return attempt(0);
   }
 
+  /* ------------------------------------------------------------ contents */
+
+  /* btoa/atob and TextEncoder/TextDecoder all exist in both the browser and
+     Node 22, so one implementation serves the page and the tests. */
+
+  function b64encode(str) {
+    var bytes = new TextEncoder().encode(str);
+    var bin = '';
+    for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return btoa(bin);
+  }
+
+  function b64decode(b64) {
+    var bin = atob(String(b64 || '').replace(/\s/g, ''));
+    var bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new TextDecoder().decode(bytes);
+  }
+
+  /**
+   * Reads a committed JSON file. A 404 means the file does not exist yet, which
+   * is a legitimate starting state — not an error.
+   */
+  function readJsonFile(token, slug, path, ref, fetchImpl) {
+    var q = ref ? '?ref=' + encodeURIComponent(ref) : '';
+    return ghFetch(token, '/repos/' + slug + '/contents/' + path + q, null, fetchImpl)
+      .then(function (file) {
+        var text = b64decode(file.content);
+        var data;
+        try {
+          data = JSON.parse(text);
+        } catch (err) {
+          throw new Error('Committed ' + path + ' is not valid JSON.');
+        }
+        return { data: data, sha: file.sha };
+      }, function (err) {
+        if (err.status === 404) return { data: null, sha: null };
+        throw err;
+      });
+  }
+
+  function writeJsonFile(token, slug, path, ref, value, sha, message, fetchImpl) {
+    var body = {
+      message: message,
+      content: b64encode(JSON.stringify(value, null, 2) + '\n')
+    };
+    if (sha) body.sha = sha;
+    if (ref) body.branch = ref;
+
+    return ghFetch(token, '/repos/' + slug + '/contents/' + path, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    }, fetchImpl);
+  }
+
+  /**
+   * Sets one key in a committed JSON map, read-modify-write.
+   *
+   * Only the one key is touched, so a device working from a stale copy cannot
+   * clobber a change another device made to a different listing. A 409 or 422
+   * means someone committed between the read and the write; re-read and retry.
+   */
+  function patchJsonMap(token, slug, path, ref, key, value, opts) {
+    var o = opts || {};
+    var attempts = o.attempts == null ? 3 : o.attempts;
+
+    function attempt(n) {
+      return readJsonFile(token, slug, path, ref, o.fetchImpl).then(function (cur) {
+        var map = (cur.data && typeof cur.data === 'object' && !Array.isArray(cur.data))
+          ? Object.assign({}, cur.data)
+          : {};
+
+        if (value == null) delete map[key];
+        else map[key] = value;
+
+        var msg = o.message || ('Job Scout: update status for ' + key);
+        return writeJsonFile(token, slug, path, ref, map, cur.sha, msg, o.fetchImpl)
+          .then(function () { return map; }, function (err) {
+            var stale = err.status === 409 || err.status === 422;
+            if (stale && n + 1 < attempts) return attempt(n + 1);
+            if (stale) throw new Error('Another device is editing statuses. Try again.');
+            throw err;
+          });
+      });
+    }
+    return attempt(0);
+  }
+
   return {
     WORKFLOW: WORKFLOW,
+    b64encode: b64encode,
+    b64decode: b64decode,
+    readJsonFile: readJsonFile,
+    writeJsonFile: writeJsonFile,
+    patchJsonMap: patchJsonMap,
     redact: redact,
     describeError: describeError,
     defaultBranch: defaultBranch,

@@ -168,3 +168,185 @@ test('waitForCompletion returns null when the run outlasts the budget', async fu
   });
   assert.strictEqual(run, null);
 });
+
+/* ------------------------------------------------ committed status syncing */
+
+function contentsRes(status, body) {
+  return Promise.resolve({
+    ok: status >= 200 && status < 300,
+    status: status,
+    json: function () { return Promise.resolve(body); }
+  });
+}
+
+function fileBody(obj, sha) {
+  return { content: GH.b64encode(JSON.stringify(obj)), sha: sha || 'sha1' };
+}
+
+test('base64 round-trips non-ascii', function () {
+  var s = JSON.stringify({ 'https://a/1': 'Applied', 'note': 'café — résumé' });
+  assert.strictEqual(GH.b64decode(GH.b64encode(s)), s);
+});
+
+test('b64decode tolerates the newlines GitHub wraps content in', function () {
+  var raw = GH.b64encode('{"a":1}');
+  var wrapped = raw.slice(0, 4) + '\n' + raw.slice(4);
+  assert.strictEqual(GH.b64decode(wrapped), '{"a":1}');
+});
+
+test('readJsonFile decodes content and returns the sha', async function () {
+  var out = await GH.readJsonFile(TOKEN, SLUG, 'job-scout/statuses.json', null, function () {
+    return contentsRes(200, fileBody({ 'https://a/1': 'Applied' }, 'abc'));
+  });
+  assert.deepStrictEqual(out.data, { 'https://a/1': 'Applied' });
+  assert.strictEqual(out.sha, 'abc');
+});
+
+test('a missing file is a starting state, not an error', async function () {
+  var out = await GH.readJsonFile(TOKEN, SLUG, 'job-scout/statuses.json', null,
+    function () { return contentsRes(404, {}); });
+  assert.deepStrictEqual(out, { data: null, sha: null });
+});
+
+test('a 403 while reading still propagates', async function () {
+  await assert.rejects(
+    GH.readJsonFile(TOKEN, SLUG, 'job-scout/statuses.json', null,
+      function () { return contentsRes(403, {}); }),
+    /Actions: Read and write|not accessible|cannot run/);
+});
+
+test('corrupt committed JSON is reported rather than silently ignored', async function () {
+  await assert.rejects(
+    GH.readJsonFile(TOKEN, SLUG, 'job-scout/statuses.json', null, function () {
+      return contentsRes(200, { content: GH.b64encode('{not json'), sha: 'x' });
+    }),
+    /not valid JSON/);
+});
+
+test('patchJsonMap sets one key and sends the sha back', async function () {
+  var put;
+  await GH.patchJsonMap(TOKEN, SLUG, 'job-scout/statuses.json', 'main',
+    'https://b/2', 'Screening', {
+      fetchImpl: function (url, opts) {
+        if (!opts || opts.method !== 'PUT') return contentsRes(200, fileBody({ 'https://a/1': 'Applied' }, 'abc'));
+        put = JSON.parse(opts.body);
+        return contentsRes(200, {});
+      }
+    });
+  assert.strictEqual(put.sha, 'abc');
+  assert.strictEqual(put.branch, 'main');
+  assert.deepStrictEqual(JSON.parse(GH.b64decode(put.content)), {
+    'https://a/1': 'Applied',
+    'https://b/2': 'Screening'
+  });
+});
+
+test('a change from a stale copy does not clobber another device', async function () {
+  // This browser never saw https://c/3; the write must preserve it.
+  var put;
+  await GH.patchJsonMap(TOKEN, SLUG, 'job-scout/statuses.json', null,
+    'https://a/1', 'Offer', {
+      fetchImpl: function (url, opts) {
+        if (!opts || opts.method !== 'PUT') {
+          return contentsRes(200, fileBody({ 'https://a/1': 'Applied', 'https://c/3': 'Passed' }, 'abc'));
+        }
+        put = JSON.parse(opts.body);
+        return contentsRes(200, {});
+      }
+    });
+  var written = JSON.parse(GH.b64decode(put.content));
+  assert.strictEqual(written['https://c/3'], 'Passed', 'another device\'s status was clobbered');
+  assert.strictEqual(written['https://a/1'], 'Offer');
+});
+
+test('a null value removes the key', async function () {
+  var put;
+  await GH.patchJsonMap(TOKEN, SLUG, 'job-scout/statuses.json', null, 'https://a/1', null, {
+    fetchImpl: function (url, opts) {
+      if (!opts || opts.method !== 'PUT') return contentsRes(200, fileBody({ 'https://a/1': 'Applied', 'https://b/2': 'Offer' }, 'abc'));
+      put = JSON.parse(opts.body);
+      return contentsRes(200, {});
+    }
+  });
+  assert.deepStrictEqual(JSON.parse(GH.b64decode(put.content)), { 'https://b/2': 'Offer' });
+});
+
+test('creating the file for the first time sends no sha', async function () {
+  var put;
+  await GH.patchJsonMap(TOKEN, SLUG, 'job-scout/statuses.json', null, 'https://a/1', 'Applied', {
+    fetchImpl: function (url, opts) {
+      if (!opts || opts.method !== 'PUT') return contentsRes(404, {});
+      put = JSON.parse(opts.body);
+      return contentsRes(201, {});
+    }
+  });
+  assert.ok(!('sha' in put), 'a create must not carry a sha');
+  assert.deepStrictEqual(JSON.parse(GH.b64decode(put.content)), { 'https://a/1': 'Applied' });
+});
+
+test('a sha conflict is re-read and retried, and the retry wins', async function () {
+  var puts = 0, reads = 0, written;
+  await GH.patchJsonMap(TOKEN, SLUG, 'job-scout/statuses.json', null, 'https://a/1', 'Offer', {
+    fetchImpl: function (url, opts) {
+      if (!opts || opts.method !== 'PUT') {
+        reads++;
+        // Second read reflects the other device's commit and a fresh sha.
+        return contentsRes(200, reads === 1
+          ? fileBody({}, 'stale')
+          : fileBody({ 'https://z/9': 'Applied' }, 'fresh'));
+      }
+      puts++;
+      var body = JSON.parse(opts.body);
+      if (body.sha === 'stale') return contentsRes(409, {});
+      written = body;
+      return contentsRes(200, {});
+    }
+  });
+  assert.strictEqual(puts, 2);
+  assert.strictEqual(written.sha, 'fresh');
+  assert.deepStrictEqual(JSON.parse(GH.b64decode(written.content)), {
+    'https://z/9': 'Applied',
+    'https://a/1': 'Offer'
+  });
+});
+
+test('a 422 is treated as a conflict too', async function () {
+  var puts = 0;
+  await GH.patchJsonMap(TOKEN, SLUG, 'job-scout/statuses.json', null, 'https://a/1', 'Offer', {
+    fetchImpl: function (url, opts) {
+      if (!opts || opts.method !== 'PUT') return contentsRes(200, fileBody({}, 'sha' + puts));
+      puts++;
+      return puts === 1 ? contentsRes(422, {}) : contentsRes(200, {});
+    }
+  });
+  assert.strictEqual(puts, 2);
+});
+
+test('endless conflicts give up with a message rather than looping', async function () {
+  var puts = 0;
+  await assert.rejects(
+    GH.patchJsonMap(TOKEN, SLUG, 'job-scout/statuses.json', null, 'https://a/1', 'Offer', {
+      attempts: 3,
+      fetchImpl: function (url, opts) {
+        if (!opts || opts.method !== 'PUT') return contentsRes(200, fileBody({}, 'x'));
+        puts++;
+        return contentsRes(409, {});
+      }
+    }),
+    /Another device is editing statuses/);
+  assert.strictEqual(puts, 3, 'must stop at the attempt budget');
+});
+
+test('a permissions failure on write is not retried as a conflict', async function () {
+  var puts = 0;
+  await assert.rejects(
+    GH.patchJsonMap(TOKEN, SLUG, 'job-scout/statuses.json', null, 'https://a/1', 'Offer', {
+      fetchImpl: function (url, opts) {
+        if (!opts || opts.method !== 'PUT') return contentsRes(200, fileBody({}, 'x'));
+        puts++;
+        return contentsRes(403, {});
+      }
+    }),
+    /Actions: Read and write/);
+  assert.strictEqual(puts, 1, 'a 403 must fail fast');
+});

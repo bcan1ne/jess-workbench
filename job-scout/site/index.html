@@ -172,6 +172,7 @@
   }
   .saved{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--tag-high);opacity:0;transition:opacity .2s;}
   .saved.show{opacity:1;}
+  .saved.bad{color:var(--tag-low);}
   @media (prefers-reduced-motion:reduce){.saved{transition:none;}}
 
   /* ---------------------------------------------------------- local */
@@ -291,7 +292,7 @@
     <div>
       <div class="rail-label">Actions</div>
       <button class="btn btn-primary ui" id="refreshBtn" type="button">Refresh listings</button>
-      <button class="btn btn-ghost ui" id="exportBtn" type="button">Export statuses</button>
+      <button class="btn btn-ghost ui" id="exportBtn" type="button">Copy statuses</button>
       <button class="btn btn-ghost ui" id="settingsBtn" type="button">Settings</button>
     </div>
 
@@ -336,7 +337,7 @@
 
   <div class="group">
     <h3>Refresh</h3>
-    <p class="hint">A token lets <b>Refresh listings</b> start a search from here. The search itself still runs in GitHub Actions, so the Anthropic key never touches this page and new listings are committed as usual.</p>
+    <p class="hint">A token does two things: lets <b>Refresh listings</b> start a search, and keeps statuses in sync across every browser. The search itself still runs in GitHub Actions, so the Anthropic key never touches this page.</p>
     <div class="keystate" id="tokenState">Checking…</div>
     <div class="field">
       <label for="ghToken">GitHub token</label>
@@ -344,18 +345,18 @@
     </div>
     <button class="panel-btn ui" id="saveTokenBtn" type="button">Save token</button>
     <button class="panel-btn sub ui" id="clearTokenBtn" type="button">Remove</button>
-    <p class="hint" style="margin-top:13px;margin-bottom:0">Create a <b>fine-grained</b> token with <span class="mono">Actions: Read and write</span> on this repository only — nothing else. It is kept in this browser, never committed. <a id="tokenLink" href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">Create one ↗</a> · <a id="actionsLink" href="#" target="_blank" rel="noopener">View runs ↗</a></p>
+    <p class="hint" style="margin-top:13px;margin-bottom:0">Create a <b>fine-grained</b> token on this repository only, with <span class="mono">Actions: Read and write</span> and <span class="mono">Contents: Read and write</span> — nothing else. It is kept in this browser, never committed. <a id="tokenLink" href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">Create one ↗</a> · <a id="actionsLink" href="#" target="_blank" rel="noopener">View runs ↗</a></p>
   </div>
 
   <div class="group">
     <h3>Statuses</h3>
-    <p class="hint">The board is a static page, so it cannot write back. Status changes are kept in this browser and stay on this device until you export them.</p>
+    <p class="hint">With a token saved, a status change is committed to <span class="mono">statuses.json</span> and shows up on every browser. Without one, changes stay on this device.</p>
     <div class="keystate" id="statusState">Checking…</div>
     <label for="exportBox" class="vh">Status JSON</label>
     <textarea class="exportbox mono" id="exportBox" readonly spellcheck="false"></textarea>
     <button class="panel-btn ui" id="copyBtn" type="button">Copy JSON</button>
-    <button class="panel-btn sub ui" id="clearBtn" type="button">Reset to committed</button>
-    <p class="hint" style="margin-top:13px;margin-bottom:0">To make these permanent for every device, paste the JSON into <span class="mono">job-scout/statuses.json</span> and commit it.</p>
+    <button class="panel-btn sub ui" id="clearBtn" type="button">Clear local copy</button>
+    <p class="hint" style="margin-top:13px;margin-bottom:0">The JSON above is what is committed. Copy it if you want a backup; you should not need to paste it anywhere.</p>
   </div>
 
   <div class="group">

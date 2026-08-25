@@ -81,9 +81,11 @@ jobs:
       contents: read
       pages: write
       id-token: write
+    # Status changes commit straight from the dashboard, so several pushes can
+    # land in quick succession. Only the newest needs to publish.
     concurrency:
       group: pages
-      cancel-in-progress: false
+      cancel-in-progress: true
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

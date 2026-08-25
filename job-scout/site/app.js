@@ -10,7 +10,7 @@
  *   updateDrivingDist() -> computed here from config.json, same math as the sheet
  */
 
-var DATA = { jobs: [], locals: [], config: {}, committedStatuses: {} };
+var DATA = { jobs: [], rawJobs: [], locals: [], config: {}, committedStatuses: {}, branch: null };
 var FILTER = 'all';
 var STORE_KEY = 'jobScout.statuses.v1';
 var TOKEN_KEY = 'jobScout.ghToken.v1';
@@ -69,11 +69,17 @@ function writeToken(v){
   }catch(err){ return false; }
 }
 
-/** Committed statuses are the floor; anything set in this browser wins. */
+/**
+ * The committed map is the truth — that is what makes a status the same on every
+ * browser. The local copy is only a cache, used before the first sync lands and
+ * when there is no token to sync with.
+ */
 function statusFor(job){
-  var local=readStore();
-  if(local[job.url]) return local[job.url];
   if(DATA.committedStatuses[job.url]) return DATA.committedStatuses[job.url];
+  if(!readToken()){
+    var local=readStore();
+    if(local[job.url]) return local[job.url];
+  }
   return job.status||'Not started';
 }
 
@@ -156,14 +162,18 @@ function load(){
     DATA.config=res[0];
     DATA.locals=res[2]||[];
     DATA.committedStatuses=res[3]||{};
+    DATA.rawJobs=res[1]||[];
     // statusFor reads committedStatuses, so resolve only once it is in place.
-    DATA.jobs=(res[1]||[]).map(function(j){
+    DATA.jobs=DATA.rawJobs.map(function(j){
       var copy=Object.assign({},j);
       copy.status=statusFor(j);
       return copy;
     });
     wireLinks();
     renderFilters(); renderBoard(); renderLocals(); fillSettings();
+    // The published statuses.json lags a Pages deploy behind. With a token,
+    // re-read the committed file directly so every browser agrees right away.
+    return syncStatuses();
   }).catch(function(err){
     $('board').innerHTML=
       '<div class="empty"><h3>Could not load the board</h3><p>'+esc(err.message||err)+'</p></div>';
@@ -260,22 +270,82 @@ function card(j,band,i){
     '</div></article>';
 }
 
+var STATUS_PATH='job-scout/statuses.json';
+var writeQueue=Promise.resolve();
+
+function flashSaved(sel,text,bad){
+  var flag=sel&&sel.parentNode?sel.parentNode.querySelector('.saved'):null;
+  if(!flag) return;
+  flag.textContent=text||'saved';
+  flag.className='saved mono show'+(bad?' bad':'');
+  clearTimeout(flag._t);
+  flag._t=setTimeout(function(){flag.className='saved mono'+(bad?' bad':'');},1800);
+}
+
+/**
+ * Optimistic locally, then committed to the repository so the change shows up
+ * on every other browser. Without a token there is nothing to sync to, so it
+ * falls back to this browser only and says so.
+ */
 function setStatus(url,val,sel){
-  var flag=sel.parentNode.querySelector('.saved');
+  var prev=DATA.committedStatuses[url];
+  var j=DATA.jobs.filter(function(x){return x.url===url;})[0];
+  if(j) j.status=val;
+  DATA.committedStatuses[url]=val;
+  renderFilters();
+  fillExport();
+
   var map=readStore();
   map[url]=val;
+  writeStore(map);
 
-  if(!writeStore(map)){
-    toast('This browser is blocking site data, so the status did not save.',true);
+  var token=readToken();
+  var slug=repoSlug();
+  if(!token||!slug){
+    flashSaved(sel,'this browser only');
     return;
   }
 
-  var j=DATA.jobs.filter(function(x){return x.url===url;})[0];
-  if(j) j.status=val;
-  flag.className='saved mono show';
-  setTimeout(function(){flag.className='saved mono';},1500);
-  renderFilters();
-  fillExport();
+  flashSaved(sel,'saving…');
+  var GH=window.JobScoutGitHub;
+
+  // Serialised: two quick changes would otherwise race on the same file sha.
+  writeQueue=writeQueue.then(function(){
+    return GH.patchJsonMap(token,slug,STATUS_PATH,DATA.branch,url,val,{
+      message:'Job Scout: mark '+(j?j.company+' — '+j.title:url)+' as '+val
+    }).then(function(){
+      flashSaved(sel,'saved');
+    },function(err){
+      // Put it back rather than showing a status the repository does not have.
+      if(prev==null) delete DATA.committedStatuses[url]; else DATA.committedStatuses[url]=prev;
+      if(j) j.status=statusFor(j);
+      renderFilters(); renderBoard(); fillExport();
+      toast(GH.redact(err.message||String(err),token),true);
+    });
+  });
+  return writeQueue;
+}
+
+/**
+ * Pulls the committed statuses through the API rather than the published file,
+ * which is a Pages deploy behind. Silent on failure — a stale board still works.
+ */
+function syncStatuses(){
+  var token=readToken();
+  var slug=repoSlug();
+  if(!token||!slug) return Promise.resolve();
+
+  var GH=window.JobScoutGitHub;
+  return GH.readJsonFile(token,slug,STATUS_PATH,DATA.branch).then(function(cur){
+    if(!cur.data||typeof cur.data!=='object') return;
+    DATA.committedStatuses=cur.data;
+    DATA.jobs=(DATA.rawJobs||[]).map(function(j){
+      var copy=Object.assign({},j);
+      copy.status=statusFor(j);
+      return copy;
+    });
+    renderFilters(); renderBoard(); fillExport();
+  },function(){ /* offline or no access — the published copy still renders */ });
 }
 
 /* ------------------------------------------------------------- locals */
@@ -308,6 +378,14 @@ function setRefreshLabel(text, busy){
  * Starts the workflow and watches it to completion. The Anthropic key stays in
  * the runner — this only presses the button and waits.
  */
+function branchOf(token,slug){
+  if(DATA.branch) return Promise.resolve(DATA.branch);
+  return window.JobScoutGitHub.defaultBranch(token,slug).then(function(b){
+    DATA.branch=b;
+    return b;
+  });
+}
+
 function doRefresh(){
   if(REFRESHING) return;
 
@@ -334,7 +412,7 @@ function doRefresh(){
   GH.latestRunId(token,slug)
     .then(function(id){
       before=id;
-      return GH.defaultBranch(token,slug);
+      return branchOf(token,slug);
     })
     .then(function(branch){
       return GH.dispatch(token,slug,branch);
@@ -451,6 +529,8 @@ function saveToken(){
   f.value='';
   fillTokenState();
   toast('Token saved.');
+  var slug=repoSlug();
+  if(slug) branchOf(v,slug).then(syncStatuses,function(){ /* reported on first use */ });
 }
 
 function clearToken(){
@@ -461,20 +541,20 @@ function clearToken(){
 }
 
 function fillExport(){
-  var local=readStore();
-  var merged=Object.assign({},DATA.committedStatuses,local);
-  Object.keys(merged).forEach(function(k){
-    if(merged[k]==='Not started') delete merged[k];
+  var map=Object.assign({},DATA.committedStatuses);
+  Object.keys(map).forEach(function(k){
+    if(map[k]==='Not started') delete map[k];
   });
 
-  $('exportBox').value=JSON.stringify(merged,null,2);
+  $('exportBox').value=JSON.stringify(map,null,2);
 
-  var n=Object.keys(local).length;
+  var n=Object.keys(map).length;
+  var synced=!!(readToken()&&repoSlug());
   var st=$('statusState');
-  st.textContent = n
-    ? n+' status change'+(n===1?'':'s')+' saved in this browser.'
-    : 'No status changes in this browser yet.';
-  st.className='keystate'+(n?' set':'');
+  st.textContent = synced
+    ? (n?n+' status'+(n===1?'':'es')+' synced across browsers.':'No statuses set yet. Changes will sync across browsers.')
+    : (n?n+' status'+(n===1?'':'es')+' saved on this device only.':'No statuses set yet. Add a token to sync them across browsers.');
+  st.className='keystate'+(synced?' set':'');
 }
 
 function copyExport(){
@@ -498,7 +578,8 @@ function clearStatuses(){
   try{ localStorage.removeItem(STORE_KEY); }catch(err){ /* nothing to clear */ }
   DATA.jobs.forEach(function(j){ j.status=statusFor(j); });
   renderFilters(); renderBoard(); fillExport();
-  toast('This browser is back to the committed statuses.');
+  toast('Local copy cleared. Committed statuses are untouched.');
+  return syncStatuses();
 }
 
 /* --------------------------------------------------------------- wire */
