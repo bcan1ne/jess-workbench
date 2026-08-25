@@ -21,7 +21,7 @@
     "greenhouse:carrotfertility": {
       "name": "Carrot Fertility",
       "ok": true,
-      "postings": 19,
+      "postings": 20,
       "reason": ""
     },
     "greenhouse:oviahealth": {
@@ -87,7 +87,7 @@
     "greenhouse:omadahealth": {
       "name": "Omada Health",
       "ok": true,
-      "postings": 28,
+      "postings": 27,
       "reason": ""
     },
     "greenhouse:hingehealth": {
