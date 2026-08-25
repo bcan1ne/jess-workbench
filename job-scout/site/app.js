@@ -866,15 +866,18 @@ function closePanel(){
   if(lastFocus&&lastFocus.focus) lastFocus.focus();
 }
 
+var CONFIG_PATH='job-scout/config.json';
+var CONFIG_FIELDS=['homeLabel','lat','lon','radius','multiplier','minSalary',
+                   'titles','industry','workSetup','hardNos'];
+var CONFIG_NUMBERS=['lat','lon','radius','multiplier','minSalary'];
+
 function fillSettings(){
   var c=DATA.config;
-  [['homeLabel',c.homeLabel],['lat',c.lat],['lon',c.lon],['radius',c.radius],
-   ['multiplier',c.multiplier],['minSalary',c.minSalary],['titles',c.titles],
-   ['industry',c.industry],['workSetup',c.workSetup],['hardNos',c.hardNos]
-  ].forEach(function(p){
-    var el=$('s_'+p[0]);
-    if(el) el.textContent=p[1]==null?'—':String(p[1]);
+  CONFIG_FIELDS.forEach(function(k){
+    var el=$('s_'+k);
+    if(el) el.value=c[k]==null?'':String(c[k]);
   });
+  configState('');
   fillExport();
   fillTokenState();
   fillResumeState();
@@ -969,6 +972,119 @@ function dismissBanner(){
   $('setupBanner').hidden=true;
 }
 
+/* -------------------------------------------------------------- config */
+
+function configState(msg,bad){
+  var el=$('configState');
+  el.textContent=msg||'These are the settings the search uses.';
+  el.className='keystate'+(bad?'':' set');
+  if(bad) el.className='keystate';
+}
+
+/** Reads the form back into a config object, validating as it goes. */
+function readConfigForm(){
+  var next=Object.assign({},DATA.config);
+  var problems=[];
+
+  CONFIG_FIELDS.forEach(function(k){
+    var el=$('s_'+k);
+    if(!el) return;
+    var raw=String(el.value||'').trim();
+
+    if(CONFIG_NUMBERS.indexOf(k)===-1){ next[k]=raw; return; }
+
+    if(raw===''){ problems.push(labelFor(k)+' cannot be empty.'); return; }
+    var n=Number(raw);
+    if(!isFinite(n)){ problems.push(labelFor(k)+' has to be a number.'); return; }
+    next[k]=n;
+  });
+
+  // Ranges that would silently produce a nonsense board rather than an error.
+  if(next.radius!=null&&(next.radius<=0||next.radius>500)) problems.push('Driving distance should be between 1 and 500 miles.');
+  if(next.multiplier!=null&&(next.multiplier<1||next.multiplier>3)) problems.push('Road factor should be between 1 and 3.');
+  if(next.minSalary!=null&&next.minSalary<0) problems.push('Salary cannot be negative.');
+  if(next.lat!=null&&(next.lat<-90||next.lat>90)) problems.push('Latitude should be between -90 and 90.');
+  if(next.lon!=null&&(next.lon<-180||next.lon>180)) problems.push('Longitude should be between -180 and 180.');
+  if(!String(next.titles||'').trim()) problems.push('Give at least one job title to look for.');
+
+  return { config:next, problems:problems };
+}
+
+function labelFor(k){
+  return { homeLabel:'Home town', lat:'Latitude', lon:'Longitude',
+           radius:'Driving distance', multiplier:'Road factor',
+           minSalary:'Salary', titles:'Job titles' }[k]||k;
+}
+
+/**
+ * Commits config.json, so the board and the next search agree. Read-modify-write
+ * on the committed file rather than on what this browser happens to be holding,
+ * so a stale tab cannot roll back a change made elsewhere.
+ */
+function saveConfig(){
+  var read=readConfigForm();
+  if(read.problems.length){
+    configState(read.problems[0],true);
+    toast(read.problems[0],true);
+    return;
+  }
+
+  var token=readToken();
+  var slug=repoSlug();
+
+  // Apply locally first — the board should respond even with no token.
+  DATA.config=read.config;
+  render(); renderLocals();
+
+  if(!token||!slug){
+    configState('Changed on this device only — add a token to save it for good.',true);
+    toast('Applied here. Without a token it cannot be saved for the next search.',true);
+    return;
+  }
+
+  configState('Saving…');
+  $('saveConfigBtn').disabled=true;
+  var GH=window.JobScoutGitHub;
+
+  GH.readJsonFile(token,slug,CONFIG_PATH,DATA.branch).then(function(cur){
+    // Keep any keys this page does not know about, such as repo.
+    var merged=Object.assign({},cur.data||{},read.config);
+    return GH.writeJsonFile(token,slug,CONFIG_PATH,DATA.branch,merged,cur.sha,
+      'Job Scout: update search settings').then(function(){
+        DATA.config=merged;
+        render(); renderLocals();
+        configState('Saved. The next search will use these.');
+        toast('Settings saved.');
+      });
+  },function(err){
+    configState(GH.redact(err.message||String(err),token),true);
+    toast(GH.redact(err.message||String(err),token),true);
+  }).then(function(){
+    $('saveConfigBtn').disabled=false;
+  });
+}
+
+/** Throws away edits by re-reading the committed file. */
+function revertConfig(){
+  var token=readToken();
+  var slug=repoSlug();
+  if(!token||!slug){
+    fillSettings(); render(); renderLocals();
+    toast('Put back what the board had loaded.');
+    return;
+  }
+  configState('Reloading…');
+  window.JobScoutGitHub.readJsonFile(token,slug,CONFIG_PATH,DATA.branch).then(function(cur){
+    if(cur.data) DATA.config=cur.data;
+    fillSettings(); render(); renderLocals();
+    configState('Back to what is saved.');
+    toast('Changes undone.');
+  },function(){
+    fillSettings();
+    configState('Could not reach the saved copy; showing what the board loaded.',true);
+  });
+}
+
 /**
  * Proves the token works before she finds out the hard way. A token with the
  * wrong permissions otherwise looks fine and then silently fails to save.
@@ -1038,15 +1154,91 @@ function clearResume(){
   toast('Résumé removed from this browser.');
 }
 
+/**
+ * pdf.js is 1.7MB, so it is only fetched when a PDF is actually chosen. Kept as
+ * a promise so picking a second PDF does not download it twice.
+ */
+var pdfLib=null;
+function loadPdfLib(){
+  if(pdfLib) return pdfLib;
+  pdfLib=import('./vendor/pdfjs/pdf.min.mjs').then(function(mod){
+    var lib=mod.default||mod;
+    lib.GlobalWorkerOptions.workerSrc='./vendor/pdfjs/pdf.worker.min.mjs';
+    return lib;
+  }).catch(function(err){
+    pdfLib=null;                              // let a retry try again
+    throw new Error('Could not load the PDF reader. '+(err.message||''));
+  });
+  return pdfLib;
+}
+
+function extractPdfText(file){
+  return loadPdfLib().then(function(lib){
+    return file.arrayBuffer().then(function(buf){
+      return lib.getDocument({ data:new Uint8Array(buf) }).promise;
+    });
+  }).then(function(doc){
+    var pages=[];
+    for(var i=1;i<=doc.numPages;i++) pages.push(i);
+    return pages.reduce(function(chain,n){
+      return chain.then(function(acc){
+        return doc.getPage(n)
+          .then(function(page){ return page.getTextContent(); })
+          .then(function(content){
+            // Insert a newline where pdf.js reports one, otherwise the whole
+            // résumé arrives as a single run-on line.
+            var text='';
+            content.items.forEach(function(item){
+              text+=item.str;
+              if(item.hasEOL) text+='\n';
+            });
+            acc.push(text);
+            return acc;
+          });
+      });
+    },Promise.resolve([])).then(function(pages){
+      return pages.join('\n\n').replace(/[ \t]+\n/g,'\n').replace(/\n{3,}/g,'\n\n').trim();
+    });
+  });
+}
+
 function loadResumeFile(file){
   if(!file) return;
-  var reader=new FileReader();
-  reader.onload=function(){
-    $('resumeText').value=String(reader.result||'').trim();
-    toast('Loaded '+file.name+'. Choose Save résumé to keep it.');
-  };
-  reader.onerror=function(){ toast('Could not read that file.',true); };
-  reader.readAsText(file);
+  var isPdf=/\.pdf$/i.test(file.name)||file.type==='application/pdf';
+
+  if(!isPdf){
+    var reader=new FileReader();
+    reader.onload=function(){
+      $('resumeText').value=String(reader.result||'').trim();
+      resumeFileState('Read '+file.name+'. Check it below, then Save.');
+    };
+    reader.onerror=function(){ resumeFileState('Could not read that file.',true); };
+    reader.readAsText(file);
+    return;
+  }
+
+  resumeFileState('Reading '+file.name+'…');
+  extractPdfText(file).then(function(text){
+    if(!text||text.replace(/\s/g,'').length<40){
+      // A scanned résumé is a picture of words, with no text to pull out.
+      resumeFileState('That PDF has no text in it — it may be a scan. '+
+        'Open it, select all, and paste instead.',true);
+      return;
+    }
+    $('resumeText').value=text;
+    resumeFileState('Read '+file.name+' — '+text.trim().split(/\s+/).length+
+      ' words. Have a quick look below, then Save.');
+  },function(err){
+    resumeFileState(err.message||'Could not read that PDF. Try pasting the text instead.',true);
+  });
+}
+
+function resumeFileState(msg,bad){
+  var el=$('resumeFileState');
+  el.textContent=msg;
+  el.className='keystate'+(bad?'':' set');
+  el.hidden=false;
+  if(bad) toast(msg,true);
 }
 
 function fillAnthState(){
@@ -1361,6 +1553,8 @@ $('bannerGo').addEventListener('click',function(e){
 });
 $('bannerDismiss').addEventListener('click',dismissBanner);
 $('checkTokenBtn').addEventListener('click',checkToken);
+$('saveConfigBtn').addEventListener('click',saveConfig);
+$('revertConfigBtn').addEventListener('click',revertConfig);
 $('bannerApply').addEventListener('click',applyPastedSetupLink);
 $('bannerLink').addEventListener('keydown',function(e){
   if(e.key==='Enter'){ e.preventDefault(); applyPastedSetupLink(); }
@@ -1393,7 +1587,6 @@ $('scrim').addEventListener('click',function(){
 });
 $('copyBtn').addEventListener('click',copyExport);
 $('clearBtn').addEventListener('click',clearStatuses);
-$('exportBtn').addEventListener('click',function(){ openPanel(); copyExport(); });
 
 $('filters').addEventListener('click',function(e){
   var btn=e.target.closest('[data-filter]');

@@ -83,6 +83,27 @@ A typical run is one search call plus zero to two scoring calls.
 
 ## Changing the search
 
+Everything the search uses is editable in **Settings**, in the panel itself —
+home town, how far she will drive, the road factor, the salary floor, the job
+titles, industries, work setup, and the things to never show. Saving commits
+`config.json` through the same token the board already uses, so the board
+updates immediately and the next search picks up the change.
+
+Saving is a read-modify-write against the committed file rather than against
+whatever this browser happens to be holding, so a stale tab cannot roll back a
+change made somewhere else. Keys the page does not know about — `repo` — are
+carried through untouched.
+
+Values are checked before anything is written: the radius has to be 1–500 miles,
+the road factor 1–3, coordinates have to be real coordinates, and there has to be
+at least one job title. A bad value is refused with a plain sentence rather than
+committed and left to produce a nonsense board.
+
+Without a token the edits still apply to the board in front of you — they just
+cannot be saved for the next search, and the panel says so.
+
+## Changing the search by hand
+
 Everything is in `config.json`:
 
 ```json
@@ -101,7 +122,7 @@ Everything is in `config.json`:
 }
 ```
 
-`repo` is `owner/name` — it tells the dashboard which repository to start runs
+You can also edit `config.json` directly. `repo` is `owner/name` — it tells the dashboard which repository to start runs
 against, so the board works from GitHub Pages, a local preview, or any other
 host. Everything else is search settings.
 
@@ -232,7 +253,8 @@ as a workflow input, or printed in a run log would be world-readable — and the
 is nothing worth accumulating anyway, since the output is a document to download
 and send. So:
 
-- The résumé is pasted into Settings → Résumé and kept in `localStorage`.
+- The résumé is loaded in Settings → Résumé and kept in `localStorage`. Choose a
+  PDF and its text is pulled out in the browser; pasting still works too.
 - The call goes from the browser straight to the Anthropic API.
 - The result appears in a panel with copy and download. Nothing is committed.
 
@@ -250,6 +272,20 @@ certifications, or metrics that are not already in the résumé, and gaps are le
 alone rather than papered over. No `web_search` tool is declared, so the call
 cannot go looking for facts to add. Read the "what changed and why" notes before
 sending anything — the model reorders and reweights, and that deserves a check.
+
+### Reading the PDF
+
+`pdf.js` is vendored under `site/vendor/pdfjs/` and **loaded only when a PDF is
+actually chosen**, so the 1.7MB costs nothing on a normal visit.
+
+Why a real library rather than a small hand-written parser: résumé PDFs use
+TrueType fonts with ToUnicode CMaps, and getting those wrong does not throw — it
+silently yields garbled text, which would then be sent to Claude as if it were a
+résumé. That failure mode is worse than the bytes. Verified against the real
+résumé: 694 words, no garbled characters, line breaks intact.
+
+A PDF with no text in it (a scan) is detected and reported rather than saved as
+an empty résumé.
 
 ## Status tracking
 
