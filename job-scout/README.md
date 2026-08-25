@@ -37,7 +37,7 @@ error text before it can reach a log line.
 | `locals.json` | Hand-curated nearby employers. The workflow does not touch it. |
 | `statuses.json` | Committed statuses, written from the dashboard and shared by every browser. |
 | `src/` | The workflow's Node modules and their tests. |
-| `site/` | The dashboard. `github.js` starts a run; `app.js` renders the board. |
+| `site/` | The dashboard. `github.js` starts runs and syncs statuses, `resume.js` tailors, `app.js` renders. |
 | `build.js` | Stages `site/` plus the JSON into `_site/` for Pages and local preview. |
 
 ## Changing the search
@@ -101,6 +101,38 @@ republish before showing new listings — usually two to three minutes end to en
 
 Without a token nothing breaks; the button just points you at Settings.
 
+## Résumé tailoring
+
+Each listing has a **Tailor résumé** button. It sends the saved résumé plus that
+posting's details to Claude and returns a rewritten résumé alongside a note
+explaining what changed.
+
+**This is the one path that does not go through Actions**, and deliberately so.
+Everything else here is committed because accumulating it is the point. A résumé
+is the opposite: this repository is public, so a résumé committed to it, passed
+as a workflow input, or printed in a run log would be world-readable — and there
+is nothing worth accumulating anyway, since the output is a document to download
+and send. So:
+
+- The résumé is pasted into Settings → Résumé and kept in `localStorage`.
+- The call goes from the browser straight to the Anthropic API.
+- The result appears in a panel with copy and download. Nothing is committed.
+
+That costs an Anthropic key in the browser, which is why the settings panel says
+so plainly. Anthropic disables browser calls by default and requires the
+`anthropic-dangerous-direct-browser-access` header to opt in; their guidance
+allows it for an internal tool with a trusted user, which is what this is. Use a
+key you are willing to revoke.
+
+It is a **separate key** from the `ANTHROPIC_API_KEY` repository secret the
+weekly search uses. That one still never leaves the runner.
+
+The prompt forbids invention: no employers, titles, dates, degrees,
+certifications, or metrics that are not already in the résumé, and gaps are left
+alone rather than papered over. No `web_search` tool is declared, so the call
+cannot go looking for facts to add. Read the "what changed and why" notes before
+sending anything — the model reorders and reweights, and that deserves a check.
+
 ## Status tracking
 
 Statuses are committed to `statuses.json` and are the same on every browser.
@@ -119,10 +151,24 @@ Without a token there is nothing to sync to, so changes stay on that device and
 the settings panel says so. **Copy JSON** gives you the map as a backup; with
 syncing on you should not need to paste it anywhere.
 
+## What is public
+
+The repository is public, so `config.json` (home location, salary floor, target
+titles), `jobs.json` (the roles and the notes on each), `statuses.json` (where
+she has applied), and the Actions run logs are all readable by anyone.
+
+`ANTHROPIC_API_KEY` is a repository secret and is not — GitHub masks secrets in
+logs, and `search.js` scrubs the key from error text as a second line of
+defence. `github.js` does the same for the GitHub token.
+
+The résumé, the tailored output, and the Anthropic key used for tailoring are
+also not public. None of them is ever written to the repository; they live in
+the browser only.
+
 ## Working on it
 
 ```bash
-npm test        # parse, merge, Anthropic contract, GitHub dispatch
+npm test        # parse, merge, Anthropic contract, GitHub dispatch, résumé tailoring
 npm run build   # stage job-scout/_site
 npm run preview # stage and serve on :8080
 npm run refresh # a real search — needs ANTHROPIC_API_KEY in the environment
