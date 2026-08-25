@@ -13,8 +13,6 @@
 var DATA = { jobs: [], rawJobs: [], locals: [], config: {}, committedStatuses: {}, branch: null };
 var FILTER = 'all';
 var STORE_KEY = 'jobScout.statuses.v1';
-var VIEW_KEY = 'jobScout.view.v1';
-var VIEW = 'cards';
 var QUERY = '';
 var SORT = { key: 'fit', dir: 'desc' };
 var EXPANDED = {};
@@ -191,12 +189,16 @@ function load(){
       return copy;
     });
     wireLinks();
+    $('skeleton').hidden=true;
+    $('tableView').hidden=false;
     render(); renderLocals(); fillSettings();
     // The published statuses.json lags a Pages deploy behind. With a token,
     // re-read the committed file directly so every browser agrees right away.
     return syncStatuses();
   }).catch(function(err){
-    $('board').innerHTML=
+    $('skeleton').hidden=true;
+    $('tableView').hidden=false;
+    $('tableEmpty').innerHTML=
       '<div class="empty"><h3>Could not load the board</h3><p>'+esc(err.message||err)+'</p></div>';
     $('railFoot').textContent='Board unavailable';
   });
@@ -370,92 +372,12 @@ function emptyMessage(){
     'Clear them in the sidebar to see all '+DATA.jobs.length+' listings.</p></div>';
 }
 
-/** Re-renders whichever view is showing, plus the counts around it. */
+/** Re-renders the board and the counts around it. */
 function render(){
   renderFilters();
-  if(VIEW==='table') renderTable(); else renderBoard();
+  renderTable();
 }
 
-function renderBoard(){
-  var jobs=visibleJobs();
-  var el=$('board');
-
-  if(!jobs.length){
-    el.innerHTML=emptyMessage();
-    return;
-  }
-
-  var html='',i=0;
-  BANDS.forEach(function(band){
-    var inBand=jobs.filter(band.test);
-    if(!inBand.length) return;
-    html+='<div class="band-head"><h2 style="color:'+band.tone+'">'+esc(band.label)+
-          '</h2><span class="desc">'+esc(band.desc)+'</span><span class="count">'+
-          inBand.length+'</span></div>';
-    inBand.forEach(function(j){ html+=card(j,band,i++); });
-  });
-  el.innerHTML=html;
-}
-
-function card(j,band,i){
-  var ticks='';
-  for(var t=10;t>=1;t--) ticks+='<span class="tick'+(t<=j.fit?' on':'')+'"></span>';
-
-  var check=salaryCheck(j);
-  var salCls = check==='Below floor' ? ' warn'
-             : check==='Clears floor' ? ' good' : '';
-
-  var facts=[
-    ['Salary', j.salary||'—', salCls],
-    ['Setup',  j.setup||'—', ''],
-    ['Where',  j.location||'—', ''],
-    ['Drive',  distanceLabel(j), ''],
-    ['Posted', j.posted||'—', '']
-  ].map(function(f){
-    return '<div class="fact"><span class="k">'+f[0]+'</span><span class="v'+f[2]+'">'+esc(f[1])+'</span></div>';
-  }).join('');
-
-  var selId='st'+i;
-  var sel='<select id="'+selId+'" data-url="'+esc(j.url)+
-    '" aria-label="Status for '+esc(j.title)+' at '+esc(j.company)+'">'+
-    STATUSES.map(function(s){
-      return '<option'+(s===j.status?' selected':'')+'>'+esc(s)+'</option>';
-    }).join('')+'</select>';
-
-  return '<article class="card" style="--tone:'+band.tone+';animation-delay:'+(i*34)+'ms">'+
-    '<div class="gauge"><span class="num">'+esc(j.fit)+'</span>'+
-      '<span class="scale" role="img" aria-label="Fit '+esc(j.fit)+' out of 10">'+ticks+'</span>'+
-      '<span class="cap">fit</span></div>'+
-    '<div class="body">'+
-      '<div class="titleline"><h3>'+esc(j.title)+'</h3><span class="co">'+esc(j.company)+'</span></div>'+
-      '<div class="strip">'+facts+'</div>'+
-      (j.why?'<p class="why">'+esc(j.why)+'</p>':'')+
-      (j.watchOuts?'<p class="watch"><b>Before you apply</b>'+esc(j.watchOuts)+'</p>':'')+
-      '<div class="actions">'+
-        (j.url?'<a class="open" href="'+esc(j.url)+'" target="_blank" rel="noopener">Open listing ↗</a>':'')+
-        sel+'<span class="saved mono" role="status">saved</span>'+
-        '<button class="tailorbtn ui" type="button" data-tailor="'+esc(j.url)+'">Tailor résumé</button>'+
-      '</div>'+
-    '</div></article>';
-}
-
-var STATUS_PATH='job-scout/statuses.json';
-var writeQueue=Promise.resolve();
-
-function flashSaved(sel,text,bad){
-  var flag=sel&&sel.parentNode?sel.parentNode.querySelector('.saved'):null;
-  if(!flag) return;
-  flag.textContent=text||'saved';
-  flag.className='saved mono show'+(bad?' bad':'');
-  clearTimeout(flag._t);
-  flag._t=setTimeout(function(){flag.className='saved mono'+(bad?' bad':'');},1800);
-}
-
-/**
- * Optimistic locally, then committed to the repository so the change shows up
- * on every other browser. Without a token there is nothing to sync to, so it
- * falls back to this browser only and says so.
- */
 /* -------------------------------------------------------------- table */
 
 /** "$100,000 - $156,000" -> "$100k–156k". Full text stays in the note. */
@@ -539,7 +461,8 @@ function tableRow(j,i){
   var selId='tst'+i;
 
   var row='<tr class="row'+(open?' open':'')+'" style="--tone:'+band.tone+'">'+
-    '<td><span class="fitcell">'+esc(j.fit)+'</span></td>'+
+    '<td><span class="fitcell" title="'+esc(band.label)+' — '+esc(band.desc)+'">'+
+      esc(j.fit)+'</span></td>'+
     '<td class="cell-co" title="'+esc(j.company)+'">'+esc(j.company)+'</td>'+
     '<td><button class="rowbtn" type="button" data-toggle="'+esc(j.url)+'" '+
       'aria-expanded="'+open+'" aria-controls="'+id+'" title="'+esc(j.title)+'">'+
@@ -583,20 +506,6 @@ function tableRow(j,i){
 function toggleRow(url){
   EXPANDED[url]=!EXPANDED[url];
   renderTable();
-}
-
-function setView(v){
-  VIEW=v;
-  try{ localStorage.setItem(VIEW_KEY,v); }catch(err){ /* preference only */ }
-  $('board').hidden = v==='table';
-  $('tableView').hidden = v!=='table';
-  $('lede').textContent = v==='table'
-    ? 'Every listing in one place. Sort by any column, and open a title to read the full note.'
-    : 'Listings are grouped by how closely they match the résumé. Work top down — the first band is where the odds are best.';
-  Array.prototype.forEach.call($('viewToggle').querySelectorAll('button'),function(b){
-    b.setAttribute('aria-pressed', String(b.getAttribute('data-view')===v));
-  });
-  render();
 }
 
 function setStatus(url,val,sel){
@@ -1123,18 +1032,7 @@ document.addEventListener('click',function(e){
   if(btn) doTailor(btn.getAttribute('data-tailor'));
 });
 
-$('board').addEventListener('change',function(e){
-  if(e.target.tagName==='SELECT'){
-    setStatus(e.target.getAttribute('data-url'),e.target.value,e.target);
-  }
-});
-
 /* ------------------------------------------------------- view + filters */
-
-$('viewToggle').addEventListener('click',function(e){
-  var btn=e.target.closest('[data-view]');
-  if(btn) setView(btn.getAttribute('data-view'));
-});
 
 var searchTimer=null;
 $('search').addEventListener('input',function(e){
@@ -1177,11 +1075,5 @@ document.addEventListener('keydown',function(e){
   if($('tailorPanel').classList.contains('open')) closeTailor();
   else if($('panel').classList.contains('open')) closePanel();
 });
-
-try{
-  var saved=localStorage.getItem(VIEW_KEY);
-  if(saved==='table'||saved==='cards') VIEW=saved;
-}catch(err){ /* default to cards */ }
-setView(VIEW);
 
 load();

@@ -37,7 +37,7 @@ error text before it can reach a log line.
 | `locals.json` | Hand-curated nearby employers. The workflow does not touch it. |
 | `statuses.json` | Committed statuses, written from the dashboard and shared by every browser. |
 | `src/` | The workflow's Node modules and their tests. |
-| `site/` | The dashboard. `github.js` starts runs and syncs statuses, `resume.js` tailors, `app.js` renders. |
+| `site/` | The dashboard — a sortable, filterable table. `github.js` starts runs and syncs statuses, `resume.js` tailors, `app.js` renders. |
 | `build.js` | Stages `site/` plus the JSON into `_site/` for Pages and local preview. |
 
 ## Changing the search

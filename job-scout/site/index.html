@@ -176,15 +176,6 @@
   @media (prefers-reduced-motion:reduce){.saved{transition:none;}}
 
   /* ---------------------------------------------------------- rail controls */
-  .seg{display:flex;border:1px solid rgba(255,255,255,.18);border-radius:3px;overflow:hidden;}
-  .seg button{
-    flex:1;background:transparent;border:none;cursor:pointer;
-    font-family:'Archivo',sans-serif;font-size:12.5px;font-weight:600;
-    color:#b8ccc5;padding:8px 6px;transition:background .15s,color .15s;
-  }
-  .seg button:hover{background:rgba(255,255,255,.07);color:#fff;}
-  .seg button[aria-pressed="true"]{background:#e8eeeb;color:var(--rail-deep);}
-
   .search{
     width:100%;font-family:'Archivo',sans-serif;font-size:13px;color:#e8eeeb;
     background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.18);
@@ -481,14 +472,6 @@
     </div>
 
     <div>
-      <div class="rail-label">View</div>
-      <div class="seg" id="viewToggle" role="group" aria-label="Board layout">
-        <button type="button" data-view="cards" aria-pressed="true">Cards</button>
-        <button type="button" data-view="table" aria-pressed="false">Table</button>
-      </div>
-    </div>
-
-    <div>
       <div class="rail-label">Find</div>
       <label class="vh" for="search">Search listings</label>
       <input class="search" id="search" type="search" placeholder="Company, title, keyword…" autocomplete="off">
@@ -512,14 +495,14 @@
   <main class="main">
     <div class="head">
       <h1>What to act on today</h1>
-      <p id="lede">Listings are grouped by how closely they match the résumé. Work top down — the first band is where the odds are best.</p>
+      <p id="lede">Every listing in one place, best fit first. Sort by any column, and open a title to read the full note.</p>
     </div>
 
-    <div id="board" aria-live="polite">
+    <div id="skeleton">
       <div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>
     </div>
 
-    <div id="tableView" hidden>
+    <div id="tableView" aria-live="polite" hidden>
       <div class="band-head">
         <h2>All listings</h2>
         <span class="desc">Click a title to open the full note</span>
