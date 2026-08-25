@@ -13,6 +13,8 @@
 var DATA = { jobs: [], locals: [], config: {}, committedStatuses: {} };
 var FILTER = 'all';
 var STORE_KEY = 'jobScout.statuses.v1';
+var TOKEN_KEY = 'jobScout.ghToken.v1';
+var REFRESHING = false;
 var lastFocus = null;
 
 var BANDS = [
@@ -52,6 +54,17 @@ function readStore(){
 function writeStore(map){
   try{
     localStorage.setItem(STORE_KEY,JSON.stringify(map));
+    return true;
+  }catch(err){ return false; }
+}
+
+function readToken(){
+  try{ return localStorage.getItem(TOKEN_KEY)||''; }catch(err){ return ''; }
+}
+
+function writeToken(v){
+  try{
+    if(v) localStorage.setItem(TOKEN_KEY,v); else localStorage.removeItem(TOKEN_KEY);
     return true;
   }catch(err){ return false; }
 }
@@ -103,6 +116,9 @@ function salaryCheck(job){
 /* Derived from the Pages URL so nothing hardcodes the repository name. */
 
 function repoSlug(){
+  // config.json wins, so the board works from any host — Pages, a local
+  // preview, or somewhere else entirely. The derivation is only a fallback.
+  if(DATA.config&&DATA.config.repo) return DATA.config.repo;
   var host=location.hostname;
   var owner=host.indexOf('.github.io')>0?host.split('.')[0]:null;
   var seg=location.pathname.split('/').filter(Boolean);
@@ -112,15 +128,10 @@ function repoSlug(){
 
 function wireLinks(){
   var slug=repoSlug();
-  var run=$('runLink');
-  var cfgLink=$('configLink');
-  if(slug){
-    run.href='https://github.com/'+slug+'/actions/workflows/job-scout.yml';
-    cfgLink.href='https://github.com/'+slug+'/blob/HEAD/job-scout/config.json';
-  }else{
-    run.href='https://github.com';
-    cfgLink.href='https://github.com';
-  }
+  var base=slug?'https://github.com/'+slug:'https://github.com';
+  $('actionsLink').href=slug?base+'/actions/workflows/job-scout.yml':base;
+  $('configLink').href=slug?base+'/blob/HEAD/job-scout/config.json':base;
+  if(slug) $('tokenLink').href='https://github.com/settings/personal-access-tokens/new';
 }
 
 /* -------------------------------------------------------------- load */
@@ -285,6 +296,113 @@ function renderLocals(){
   }).join('');
 }
 
+/* ------------------------------------------------------------ refresh */
+
+function setRefreshLabel(text, busy){
+  var b=$('refreshBtn');
+  b.textContent=text;
+  b.disabled=!!busy;
+}
+
+/**
+ * Starts the workflow and watches it to completion. The Anthropic key stays in
+ * the runner — this only presses the button and waits.
+ */
+function doRefresh(){
+  if(REFRESHING) return;
+
+  var token=readToken();
+  if(!token){
+    openPanel();
+    $('ghToken').focus();
+    toast('Add a GitHub token to refresh from here.');
+    return;
+  }
+
+  var slug=repoSlug();
+  if(!slug){
+    toast('No repository configured. Set "repo" in config.json to owner/name.',true);
+    return;
+  }
+
+  var GH=window.JobScoutGitHub;
+  REFRESHING=true;
+  setRefreshLabel('Starting…',true);
+
+  var before=null;
+
+  GH.latestRunId(token,slug)
+    .then(function(id){
+      before=id;
+      return GH.defaultBranch(token,slug);
+    })
+    .then(function(branch){
+      return GH.dispatch(token,slug,branch);
+    })
+    .then(function(){
+      setRefreshLabel('Searching…',true);
+      toast('Search started. This usually takes a couple of minutes.');
+      return GH.waitForRun(token,slug,before);
+    })
+    .then(function(runId){
+      if(runId==null){
+        throw new Error('The run did not appear. Check View runs in Settings.');
+      }
+      return GH.waitForCompletion(token,slug,runId);
+    })
+    .then(function(run){
+      if(run==null){
+        toast('Still running. Check View runs in Settings for the outcome.');
+        return;
+      }
+      if(run.conclusion!=='success'){
+        toast('The run finished as '+run.conclusion+'. Check View runs in Settings.',true);
+        return;
+      }
+      setRefreshLabel('Publishing…',true);
+      return awaitNewListings();
+    })
+    .catch(function(err){
+      toast(GH.redact(err.message||String(err),token),true);
+    })
+    .then(function(){
+      REFRESHING=false;
+      setRefreshLabel('Refresh listings',false);
+    });
+}
+
+/**
+ * The run commits jobs.json, but Pages has to republish before the new file is
+ * visible here. Poll for it rather than claiming success too early.
+ */
+function awaitNewListings(){
+  var had=DATA.jobs.length;
+  var tries=0;
+
+  function attempt(){
+    tries++;
+    return getJson('jobs.json?t='+tries,null).then(function(jobs){
+      if(jobs&&jobs.length!==had){
+        var added=jobs.length-had;
+        DATA.jobs=jobs.map(function(j){
+          var copy=Object.assign({},j);
+          copy.status=statusFor(j);
+          return copy;
+        });
+        renderFilters(); renderBoard();
+        toast(added+(added===1?' new listing':' new listings')+' added.');
+        return;
+      }
+      if(tries>=20){
+        toast('Run finished. Nothing new, or the site is still publishing.');
+        return;
+      }
+      return new Promise(function(r){setTimeout(r,6000);}).then(attempt);
+    });
+  }
+  return attempt();
+}
+
 /* ----------------------------------------------------------- settings */
 
 function openPanel(){
@@ -310,6 +428,36 @@ function fillSettings(){
     if(el) el.textContent=p[1]==null?'—':String(p[1]);
   });
   fillExport();
+  fillTokenState();
+}
+
+function fillTokenState(){
+  var has=!!readToken();
+  var el=$('tokenState');
+  el.textContent = has
+    ? 'A token is saved in this browser — Refresh listings is live.'
+    : 'No token saved. Refresh listings will ask for one.';
+  el.className='keystate'+(has?' set':'');
+}
+
+function saveToken(){
+  var f=$('ghToken');
+  var v=f.value.trim();
+  if(!v){ toast('Paste a token first.',true); return; }
+  if(!writeToken(v)){
+    toast('This browser is blocking site data, so the token did not save.',true);
+    return;
+  }
+  f.value='';
+  fillTokenState();
+  toast('Token saved.');
+}
+
+function clearToken(){
+  writeToken('');
+  $('ghToken').value='';
+  fillTokenState();
+  toast('Token removed from this browser.');
 }
 
 function fillExport(){
@@ -355,6 +503,9 @@ function clearStatuses(){
 
 /* --------------------------------------------------------------- wire */
 
+$('refreshBtn').addEventListener('click',doRefresh);
+$('saveTokenBtn').addEventListener('click',saveToken);
+$('clearTokenBtn').addEventListener('click',clearToken);
 $('settingsBtn').addEventListener('click',openPanel);
 $('closeBtn').addEventListener('click',closePanel);
 $('scrim').addEventListener('click',closePanel);

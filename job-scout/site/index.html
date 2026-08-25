@@ -213,6 +213,11 @@
   .group .hint a{color:var(--tag-high);}
   .field{margin-bottom:14px;}
   .field label{display:block;font-size:11px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:5px;}
+  .field input{
+    width:100%;font-family:'Archivo',sans-serif;font-size:14px;color:var(--ink);
+    background:var(--card);border:1px solid var(--line-strong);border-radius:3px;padding:9px 11px;
+  }
+  .field input:focus{outline:2px solid var(--focus);outline-offset:1px;border-color:transparent;}
   .field .ro{
     font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--ink);
     background:var(--card);border:1px solid var(--line);border-radius:3px;
@@ -285,8 +290,8 @@
 
     <div>
       <div class="rail-label">Actions</div>
-      <button class="btn btn-primary ui" id="exportBtn" type="button">Export statuses</button>
-      <a class="btn btn-ghost ui" id="runLink" href="#" target="_blank" rel="noopener">Run a search ↗</a>
+      <button class="btn btn-primary ui" id="refreshBtn" type="button">Refresh listings</button>
+      <button class="btn btn-ghost ui" id="exportBtn" type="button">Export statuses</button>
       <button class="btn btn-ghost ui" id="settingsBtn" type="button">Settings</button>
     </div>
 
@@ -330,6 +335,19 @@
   <p class="lede">Everything the search uses. These are read from <span class="mono">config.json</span> in the repository — edit that file and the next run picks it up.</p>
 
   <div class="group">
+    <h3>Refresh</h3>
+    <p class="hint">A token lets <b>Refresh listings</b> start a search from here. The search itself still runs in GitHub Actions, so the Anthropic key never touches this page and new listings are committed as usual.</p>
+    <div class="keystate" id="tokenState">Checking…</div>
+    <div class="field">
+      <label for="ghToken">GitHub token</label>
+      <input type="password" id="ghToken" placeholder="github_pat_… or ghp_…" autocomplete="off" spellcheck="false">
+    </div>
+    <button class="panel-btn ui" id="saveTokenBtn" type="button">Save token</button>
+    <button class="panel-btn sub ui" id="clearTokenBtn" type="button">Remove</button>
+    <p class="hint" style="margin-top:13px;margin-bottom:0">Create a <b>fine-grained</b> token with <span class="mono">Actions: Read and write</span> on this repository only — nothing else. It is kept in this browser, never committed. <a id="tokenLink" href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">Create one ↗</a> · <a id="actionsLink" href="#" target="_blank" rel="noopener">View runs ↗</a></p>
+  </div>
+
+  <div class="group">
     <h3>Statuses</h3>
     <p class="hint">The board is a static page, so it cannot write back. Status changes are kept in this browser and stay on this device until you export them.</p>
     <div class="keystate" id="statusState">Checking…</div>
@@ -367,7 +385,7 @@
 
   <div class="group">
     <h3>Schedule</h3>
-    <p class="hint" id="scheduleHint">The search runs every Monday morning and adds anything new to the board. Use <b>Run a search</b> in the sidebar to trigger one now.</p>
+    <p class="hint" id="scheduleHint">The search runs every Monday morning and adds anything new to the board. <b>Refresh listings</b> starts one now.</p>
   </div>
 
   <button class="panel-btn sub ui" id="closeBtn" type="button" style="margin-left:0">Close</button>
@@ -375,6 +393,7 @@
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+<script src="github.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
