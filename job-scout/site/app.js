@@ -508,6 +508,19 @@ function toggleRow(url){
   renderTable();
 }
 
+var STATUS_PATH='job-scout/statuses.json';
+var writeQueue=Promise.resolve();
+
+/** The transient indicator beside a status select. */
+function flashSaved(sel,text,bad){
+  var flag=sel&&sel.parentNode?sel.parentNode.querySelector('.saved'):null;
+  if(!flag) return;
+  flag.textContent=text||'saved';
+  flag.className='saved mono show'+(bad?' bad':'');
+  clearTimeout(flag._t);
+  flag._t=setTimeout(function(){flag.className='saved mono'+(bad?' bad':'');},1800);
+}
+
 function setStatus(url,val,sel){
   var prev=DATA.committedStatuses[url];
   var j=DATA.jobs.filter(function(x){return x.url===url;})[0];
