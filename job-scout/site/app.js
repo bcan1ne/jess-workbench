@@ -20,6 +20,10 @@ var SORT = { key: 'fit', dir: 'desc' };
 var EXPANDED = {};
 var ONLY = { remote: false, clears: false, radius: false };
 var TOKEN_KEY = 'jobScout.ghToken.v1';
+var RESUME_KEY = 'jobScout.resume.v1';
+var ANTH_KEY = 'jobScout.anthKey.v1';
+var TAILORING = false;
+var LAST_TAILOR = null;
 var REFRESHING = false;
 var lastFocus = null;
 
@@ -60,6 +64,17 @@ function readStore(){
 function writeStore(map){
   try{
     localStorage.setItem(STORE_KEY,JSON.stringify(map));
+    return true;
+  }catch(err){ return false; }
+}
+
+function readLocal(key){
+  try{ return localStorage.getItem(key)||''; }catch(err){ return ''; }
+}
+
+function writeLocal(key,v){
+  try{
+    if(v) localStorage.setItem(key,v); else localStorage.removeItem(key);
     return true;
   }catch(err){ return false; }
 }
@@ -419,6 +434,7 @@ function card(j,band,i){
       '<div class="actions">'+
         (j.url?'<a class="open" href="'+esc(j.url)+'" target="_blank" rel="noopener">Open listing ↗</a>':'')+
         sel+'<span class="saved mono" role="status">saved</span>'+
+        '<button class="tailorbtn ui" type="button" data-tailor="'+esc(j.url)+'">Tailor résumé</button>'+
       '</div>'+
     '</div></article>';
 }
@@ -554,8 +570,11 @@ function tableRow(j,i){
       (j.firstSeen?'<span>first seen '+esc(j.firstSeen)+'</span>':'')+'</p>'+
     (j.why?'<p class="why">'+esc(j.why)+'</p>':'')+
     (j.watchOuts?'<p class="watch"><b>Before you apply</b>'+esc(j.watchOuts)+'</p>':'')+
-    (j.url?'<div class="actions"><a class="open" href="'+esc(j.url)+
-      '" target="_blank" rel="noopener">Open listing ↗</a></div>':'')+
+    '<div class="actions">'+
+      (j.url?'<a class="open" href="'+esc(j.url)+
+        '" target="_blank" rel="noopener">Open listing ↗</a>':'')+
+      '<button class="tailorbtn ui" type="button" data-tailor="'+esc(j.url)+'">Tailor résumé</button>'+
+    '</div>'+
   '</div></td></tr>';
 
   return row+detail;
@@ -783,6 +802,119 @@ function awaitNewListings(){
   return attempt();
 }
 
+/* -------------------------------------------------------------- tailor */
+
+function openTailor(){
+  lastFocus=document.activeElement;
+  $('tailorPanel').classList.add('open');
+  $('scrim').classList.add('open');
+  $('tailorPanel').focus();
+}
+
+function closeTailor(){
+  $('tailorPanel').classList.remove('open');
+  if(!$('panel').classList.contains('open')) $('scrim').classList.remove('open');
+  if(lastFocus&&lastFocus.focus) lastFocus.focus();
+}
+
+function tailorState(msg,bad){
+  var el=$('tailorState');
+  el.textContent=msg;
+  el.className='tstate'+(bad?' bad':'');
+  el.hidden=false;
+}
+
+function resetTailorPanel(){
+  $('tailorOut').hidden=true;
+  $('tailorOut').value='';
+  $('tailorNotes').hidden=true;
+  ['tailorCopy','tailorDownload','tailorRetry'].forEach(function(id){ $(id).hidden=true; });
+}
+
+function showTailorResult(result){
+  $('tailorOut').value=result.resume;
+  $('tailorOut').hidden=false;
+  $('tailorCopy').hidden=false;
+  $('tailorDownload').hidden=false;
+  $('tailorRetry').hidden=false;
+
+  if(result.notes){
+    var items=result.notes.split('\n')
+      .map(function(l){ return l.replace(/^\s*[-*•]\s*/,'').trim(); })
+      .filter(Boolean);
+    $('tailorNotes').innerHTML='<h3>What changed and why</h3><ul>'+
+      items.map(function(l){ return '<li>'+esc(l)+'</li>'; }).join('')+'</ul>';
+    $('tailorNotes').hidden=false;
+  }
+}
+
+function setTailorButtons(busy){
+  Array.prototype.forEach.call(document.querySelectorAll('.tailorbtn'),function(b){
+    b.disabled=busy;
+    b.textContent=busy?'Tailoring…':'Tailor résumé';
+  });
+}
+
+/**
+ * The one call that leaves the browser directly. The resume and the result stay
+ * on this machine - nothing here is committed, because the repository is public.
+ */
+function doTailor(url){
+  var job=DATA.jobs.filter(function(j){return j.url===url;})[0];
+  if(!job) return;
+
+  var key=readLocal(ANTH_KEY);
+  var resume=readLocal(RESUME_KEY);
+
+  LAST_TAILOR=url;
+  resetTailorPanel();
+  $('tailorFor').textContent=job.title+' · '+job.company;
+  openTailor();
+
+  if(!resume){ tailorState('No résumé saved yet. Add one in Settings → Résumé.',true); return; }
+  if(!key){ tailorState('No Anthropic key saved yet. Add one in Settings → Anthropic key.',true); return; }
+  if(TAILORING){ tailorState('Another tailoring run is still going. Wait for it to finish.',true); return; }
+
+  TAILORING=true;
+  setTailorButtons(true);
+  tailorState('Tailoring against this posting… this usually takes under a minute.');
+
+  var R=window.JobScoutResume;
+  R.tailor(key,resume,job).then(function(result){
+    tailorState('Done. Read the notes before you send it — check every claim against the original.');
+    showTailorResult(result);
+  },function(err){
+    tailorState(R.redact(err.message||String(err),key),true);
+    $('tailorRetry').hidden=false;
+  }).then(function(){
+    TAILORING=false;
+    setTailorButtons(false);
+  });
+}
+
+function copyTailored(){
+  var box=$('tailorOut');
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(box.value).then(function(){
+      toast('Tailored résumé copied.');
+    },function(){ box.focus(); box.select(); toast('Select all and copy.'); });
+  }else{ box.focus(); box.select(); toast('Select all and copy.'); }
+}
+
+function downloadTailored(){
+  var job=DATA.jobs.filter(function(j){return j.url===LAST_TAILOR;})[0];
+  var slug=(job?(job.company+'-'+job.title):'resume')
+    .toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,60);
+  var blob=new Blob([$('tailorOut').value],{type:'text/markdown;charset=utf-8'});
+  var a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='resume-'+slug+'.md';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(function(){ URL.revokeObjectURL(a.href); },1000);
+}
+
 /* ----------------------------------------------------------- settings */
 
 function openPanel(){
@@ -809,6 +941,76 @@ function fillSettings(){
   });
   fillExport();
   fillTokenState();
+  fillResumeState();
+  fillAnthState();
+}
+
+function fillResumeState(){
+  var r=readLocal(RESUME_KEY);
+  var el=$('resumeState');
+  el.textContent = r
+    ? 'Résumé saved in this browser — '+r.trim().split(/\s+/).length+' words.'
+    : 'No résumé saved. Tailor will ask for one.';
+  el.className='keystate'+(r?' set':'');
+  if(r&&!$('resumeText').value) $('resumeText').value=r;
+}
+
+function saveResume(){
+  var v=$('resumeText').value.trim();
+  if(!v){ toast('Paste a résumé first.',true); return; }
+  if(!writeLocal(RESUME_KEY,v)){
+    toast('This browser is blocking site data, so the résumé did not save.',true);
+    return;
+  }
+  fillResumeState();
+  toast('Résumé saved to this browser.');
+}
+
+function clearResume(){
+  writeLocal(RESUME_KEY,'');
+  $('resumeText').value='';
+  fillResumeState();
+  toast('Résumé removed from this browser.');
+}
+
+function loadResumeFile(file){
+  if(!file) return;
+  var reader=new FileReader();
+  reader.onload=function(){
+    $('resumeText').value=String(reader.result||'').trim();
+    toast('Loaded '+file.name+'. Choose Save résumé to keep it.');
+  };
+  reader.onerror=function(){ toast('Could not read that file.',true); };
+  reader.readAsText(file);
+}
+
+function fillAnthState(){
+  var has=!!readLocal(ANTH_KEY);
+  var el=$('anthState');
+  el.textContent = has
+    ? 'A key is saved in this browser — Tailor is live.'
+    : 'No key saved. Tailor will ask for one.';
+  el.className='keystate'+(has?' set':'');
+}
+
+function saveAnthKey(){
+  var f=$('anthKey');
+  var v=f.value.trim();
+  if(!v){ toast('Paste a key first.',true); return; }
+  if(!writeLocal(ANTH_KEY,v)){
+    toast('This browser is blocking site data, so the key did not save.',true);
+    return;
+  }
+  f.value='';
+  fillAnthState();
+  toast('Anthropic key saved.');
+}
+
+function clearAnthKey(){
+  writeLocal(ANTH_KEY,'');
+  $('anthKey').value='';
+  fillAnthState();
+  toast('Anthropic key removed from this browser.');
 }
 
 function fillTokenState(){
@@ -891,7 +1093,10 @@ $('saveTokenBtn').addEventListener('click',saveToken);
 $('clearTokenBtn').addEventListener('click',clearToken);
 $('settingsBtn').addEventListener('click',openPanel);
 $('closeBtn').addEventListener('click',closePanel);
-$('scrim').addEventListener('click',closePanel);
+$('scrim').addEventListener('click',function(){
+  if($('tailorPanel').classList.contains('open')) closeTailor();
+  if($('panel').classList.contains('open')) closePanel();
+});
 $('copyBtn').addEventListener('click',copyExport);
 $('clearBtn').addEventListener('click',clearStatuses);
 $('exportBtn').addEventListener('click',function(){ openPanel(); copyExport(); });
@@ -899,6 +1104,23 @@ $('exportBtn').addEventListener('click',function(){ openPanel(); copyExport(); }
 $('filters').addEventListener('click',function(e){
   var btn=e.target.closest('[data-filter]');
   if(btn) setFilter(btn.getAttribute('data-filter'));
+});
+
+/* ------------------------------------------------------------- tailor */
+
+$('saveResumeBtn').addEventListener('click',saveResume);
+$('clearResumeBtn').addEventListener('click',clearResume);
+$('resumeFile').addEventListener('change',function(e){ loadResumeFile(e.target.files[0]); });
+$('saveAnthBtn').addEventListener('click',saveAnthKey);
+$('clearAnthBtn').addEventListener('click',clearAnthKey);
+$('tailorClose').addEventListener('click',closeTailor);
+$('tailorCopy').addEventListener('click',copyTailored);
+$('tailorDownload').addEventListener('click',downloadTailored);
+$('tailorRetry').addEventListener('click',function(){ if(LAST_TAILOR) doTailor(LAST_TAILOR); });
+
+document.addEventListener('click',function(e){
+  var btn=e.target.closest('[data-tailor]');
+  if(btn) doTailor(btn.getAttribute('data-tailor'));
 });
 
 $('board').addEventListener('change',function(e){
@@ -950,7 +1172,10 @@ $('tableView').addEventListener('change',function(e){
 });
 
 document.addEventListener('keydown',function(e){
-  if(e.key==='Escape'&&$('panel').classList.contains('open')) closePanel();
+  if(e.key!=='Escape') return;
+  // Innermost first: the tailor drawer can be opened from over the settings one.
+  if($('tailorPanel').classList.contains('open')) closeTailor();
+  else if($('panel').classList.contains('open')) closePanel();
 });
 
 try{

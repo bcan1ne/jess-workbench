@@ -366,6 +366,63 @@
   }
   .exportbox:focus{outline:2px solid var(--focus);outline-offset:1px;border-color:transparent;}
 
+  /* ---------------------------------------------------------- tailor */
+  .tailorbtn{
+    font-family:'Archivo',sans-serif;font-size:12.5px;font-weight:600;cursor:pointer;
+    background:transparent;color:var(--rail);border:1px solid var(--line-strong);
+    border-radius:3px;padding:5px 11px;transition:background .15s,border-color .15s;
+  }
+  .tailorbtn:hover:not(:disabled){background:#eef3f0;border-color:var(--tag-high);color:var(--tag-high);}
+  .tailorbtn:disabled{opacity:.55;cursor:progress;}
+
+  .tpanel{
+    position:fixed;top:0;right:0;bottom:0;width:min(760px,100%);
+    background:var(--paper);z-index:55;overflow-y:auto;padding:26px 30px 46px;
+    transform:translateX(100%);transition:transform .26s cubic-bezier(.3,.8,.3,1);
+    border-left:1px solid var(--line-strong);visibility:hidden;
+  }
+  .tpanel.open{transform:none;visibility:visible;}
+  @media (prefers-reduced-motion:reduce){.tpanel{transition:none;}}
+  .tpanel h2{font-size:20px;font-weight:700;letter-spacing:-.02em;margin:0 0 3px;}
+  .tpanel .for{font-family:'Archivo',sans-serif;font-size:13.5px;color:var(--ink-soft);margin:0 0 20px;}
+  .tpanel .bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px;}
+  .tout{
+    width:100%;min-height:46vh;font-family:'IBM Plex Mono',monospace;font-size:12.5px;
+    line-height:1.6;color:var(--ink);background:var(--card);
+    border:1px solid var(--line-strong);border-radius:3px;padding:14px 16px;resize:vertical;
+  }
+  .tout:focus{outline:2px solid var(--focus);outline-offset:1px;border-color:transparent;}
+  .tnotes{
+    margin-top:16px;padding-top:14px;border-top:1px solid var(--line);
+    font-size:14.5px;color:var(--ink);
+  }
+  .tnotes h3{font-size:10.5px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;margin:0 0 8px;}
+  .tnotes ul{margin:0;padding-left:20px;}
+  .tnotes li{margin-bottom:5px;}
+  .tstate{
+    font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--ink-soft);
+    background:#eef3f0;border-radius:3px;padding:10px 12px;margin-bottom:14px;
+  }
+  .tstate.bad{background:#f6ecea;color:var(--tag-low);}
+
+  .filebtn{
+    display:inline-block;font-family:'Archivo',sans-serif;font-size:12.5px;font-weight:600;
+    cursor:pointer;border:1px solid var(--line-strong);border-radius:3px;
+    padding:8px 13px;color:var(--ink-soft);background:var(--card);
+  }
+  .filebtn:hover{border-color:var(--tag-high);color:var(--tag-high);}
+  .resumebox{
+    width:100%;font-family:'IBM Plex Mono',monospace;font-size:11.5px;line-height:1.5;
+    color:var(--ink);background:var(--card);border:1px solid var(--line-strong);
+    border-radius:3px;padding:9px 11px;min-height:120px;resize:vertical;margin-bottom:10px;
+  }
+  .resumebox:focus{outline:2px solid var(--focus);outline-offset:1px;border-color:transparent;}
+  .warnbox{
+    font-family:'Archivo',sans-serif;font-size:12.5px;line-height:1.5;
+    background:#f6efe6;border-left:2px solid var(--tag-mid);
+    padding:9px 12px;border-radius:2px;margin:0 0 13px;color:var(--ink-soft);
+  }
+
   /* ---------------------------------------------------------- misc */
   .toast{
     position:fixed;left:50%;bottom:26px;transform:translate(-50%,14px);
@@ -516,6 +573,34 @@
   </div>
 
   <div class="group">
+    <h3>Résumé</h3>
+    <p class="hint">Used by <b>Tailor</b> on each listing. Kept in this browser only — never committed, never sent anywhere but Anthropic.</p>
+    <div class="keystate" id="resumeState">Checking…</div>
+    <label for="resumeText" class="vh">Résumé text</label>
+    <textarea class="resumebox" id="resumeText" spellcheck="false" placeholder="Paste the résumé here. If it is a PDF, open it, select all, and paste — that keeps the text without adding a PDF reader to the page."></textarea>
+    <div class="bar" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <label class="filebtn" for="resumeFile">Load a .txt or .md file</label>
+      <input type="file" id="resumeFile" accept=".txt,.md,.markdown,text/plain,text/markdown" class="vh">
+      <button class="panel-btn ui" id="saveResumeBtn" type="button">Save résumé</button>
+      <button class="panel-btn sub ui" id="clearResumeBtn" type="button" style="margin-left:0">Remove</button>
+    </div>
+  </div>
+
+  <div class="group">
+    <h3>Anthropic key</h3>
+    <p class="hint">Only for tailoring. The weekly job search does not use this — it runs in GitHub Actions with its own secret.</p>
+    <p class="warnbox">This key lives in this browser, so anything running in it can read the key. Use a key you are willing to revoke, and revoke it if the machine is shared or lost.</p>
+    <div class="keystate" id="anthState">Checking…</div>
+    <div class="field">
+      <label for="anthKey">Anthropic API key</label>
+      <input type="password" id="anthKey" placeholder="sk-ant-…" autocomplete="off" spellcheck="false">
+    </div>
+    <button class="panel-btn ui" id="saveAnthBtn" type="button">Save key</button>
+    <button class="panel-btn sub ui" id="clearAnthBtn" type="button">Remove</button>
+    <p class="hint" style="margin-top:13px;margin-bottom:0">Get one at <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com ↗</a>.</p>
+  </div>
+
+  <div class="group">
     <h3>Statuses</h3>
     <p class="hint">With a token saved, a status change is committed to <span class="mono">statuses.json</span> and shows up on every browser. Without one, changes stay on this device.</p>
     <div class="keystate" id="statusState">Checking…</div>
@@ -559,9 +644,25 @@
   <button class="panel-btn sub ui" id="closeBtn" type="button" style="margin-left:0">Close</button>
 </aside>
 
+<aside class="tpanel" id="tailorPanel" role="dialog" aria-modal="true" aria-label="Tailored résumé" tabindex="-1">
+  <h2>Tailored résumé</h2>
+  <p class="for" id="tailorFor"></p>
+  <div class="tstate" id="tailorState">Working…</div>
+  <div class="bar">
+    <button class="panel-btn ui" id="tailorCopy" type="button" hidden>Copy</button>
+    <button class="panel-btn sub ui" id="tailorDownload" type="button" style="margin-left:0" hidden>Download .md</button>
+    <button class="panel-btn sub ui" id="tailorRetry" type="button" style="margin-left:0" hidden>Try again</button>
+    <button class="panel-btn sub ui" id="tailorClose" type="button" style="margin-left:auto">Close</button>
+  </div>
+  <label for="tailorOut" class="vh">Tailored résumé text</label>
+  <textarea class="tout" id="tailorOut" spellcheck="false" hidden></textarea>
+  <div class="tnotes" id="tailorNotes" hidden></div>
+</aside>
+
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script src="github.js"></script>
+<script src="resume.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
