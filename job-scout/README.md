@@ -12,7 +12,9 @@ the dashboard's visual design is unchanged. What moved is where the work happens
 ```
 GitHub Actions (weekly cron)
   └─ src/refresh.js
-       ├─ reads config.json + jobs.json
+       ├─ reads config.json + companies.json + jobs.json
+       ├─ src/sources.js  → polls employer ATS boards, filters by title
+       ├─ src/score.js    → scores what survived, in batches
        ├─ src/search.js   → Anthropic Messages API with the web_search tool
        ├─ src/parse.js    → text blocks out of the response, fences stripped
        ├─ src/merge.js    → dedupe on url, append new, never touch existing
@@ -33,12 +35,51 @@ error text before it can reach a log line.
 | Path | What it is |
 |---|---|
 | `config.json` | Every search setting. Editing this is the only way to change the search. |
+| `companies.json` | The employer watchlist polled directly from Greenhouse, Lever, and Ashby. |
 | `jobs.json` | The board. Appended to by the workflow, never rewritten. |
 | `locals.json` | Hand-curated nearby employers. The workflow does not touch it. |
 | `statuses.json` | Committed statuses, written from the dashboard and shared by every browser. |
 | `src/` | The workflow's Node modules and their tests. |
 | `site/` | The dashboard — a sortable, filterable table. `github.js` starts runs and syncs statuses, `resume.js` tailors, `app.js` renders. |
 | `build.js` | Stages `site/` plus the JSON into `_site/` for Pages and local preview. |
+
+## Where listings come from
+
+Two sources, deliberately different in kind.
+
+**Company boards** (`companies.json`). A watchlist of employers polled straight
+from their applicant-tracking system — Greenhouse, Lever, and Ashby all publish
+free JSON with no auth. This is exhaustive for the companies on it: a role that
+sits open for three weeks cannot be missed because one week's search happened
+not to return it. Every URL is the employer's own, so nothing can be invented.
+
+**Web search.** Finds employers that are not on the list. Broad, but
+non-exhaustive and capped per run.
+
+The two complement each other: search discovers, the watchlist watches.
+
+Adding a company is one line:
+
+```json
+{ "name": "Pomelo Care", "ats": "greenhouse", "board": "pomelocare" }
+```
+
+`ats` is `greenhouse`, `lever`, or `ashby`. `board` is the slug in the
+employer's job-board URL. An unreachable or renamed board is reported and
+skipped — it never fails the run.
+
+### Keeping the cost flat
+
+Polling 22 boards would be expensive if every posting were scored. It is not:
+
+1. Postings already on the board are dropped by URL.
+2. A title filter built from `titles` and `hardNos` drops the obvious misses —
+   an engineering role at a health company never reaches the model.
+3. Survivors are batched, twenty at a time, into one scoring call each.
+4. Any scored listing whose URL was not one we supplied is discarded, so a
+   mangled or invented URL cannot reach the board.
+
+A typical run is one search call plus zero to two scoring calls.
 
 ## Changing the search
 
@@ -168,7 +209,8 @@ the browser only.
 ## Working on it
 
 ```bash
-npm test        # parse, merge, Anthropic contract, GitHub dispatch, résumé tailoring
+npm test        # parse, merge, ATS sources, scoring, Anthropic contract,
+                #   GitHub dispatch, résumé tailoring
 npm run build   # stage job-scout/_site
 npm run preview # stage and serve on :8080
 npm run refresh # a real search — needs ANTHROPIC_API_KEY in the environment

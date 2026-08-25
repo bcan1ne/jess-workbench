@@ -7,20 +7,15 @@
  * Change the wording only on purpose.
  */
 
+var { CANDIDATE, CONTRACT } = require('./profile');
+
 var API_URL = 'https://api.anthropic.com/v1/messages';
 var MODEL = 'claude-sonnet-4-6';
 var MAX_TOKENS = 8000;
 
 function buildPrompt(cfg, existing) {
   return 'Find currently open job postings matching this candidate profile. Use web search.\n\n' +
-    'CANDIDATE: Client success and implementation professional in digital health. Background spans ' +
-    'telehealth client implementation and account management, virtual maternity and doula program client ' +
-    'success, corporate workplace wellbeing for self-insured employers, public health outreach and ' +
-    'lactation consulting, and adjunct health science instruction. MBA plus MS in Entrepreneurial ' +
-    'Nutrition, BS in Nutrition. Strengths: client relationship management, program implementation and ' +
-    'launch readiness, cross-functional coordination, webinar and public speaking, translating nutrition ' +
-    'science for lay audiences. Tools: Salesforce, Metabase, Box, Microsoft Office, Google Workspace, ' +
-    'Zoom, LMS platforms.\n\n' +
+    'CANDIDATE: ' + CANDIDATE + '\n\n' +
     'REQUIREMENTS:\n' +
     '- Minimum base salary: ' + cfg.minSalary + '\n' +
     '- Work setup: ' + cfg.workSetup + '\n' +
@@ -35,10 +30,7 @@ function buildPrompt(cfg, existing) {
     '- Skip any posting whose URL appears in this already-seen list:\n' +
       JSON.stringify(existing) + '\n\n' +
     'Return ONLY a JSON array, no prose and no markdown fences. Each object:\n' +
-    '{"fit": <1-10 integer>, "company": "", "title": "", "url": "", "salary": "", ' +
-    '"salaryMin": <number or null>, "setup": "Remote|Hybrid|On-site", "location": "", ' +
-    '"lat": <number or null>, "lon": <number or null>, "industry": "", "why": "", ' +
-    '"watchOuts": "", "posted": ""}\n\n' +
+    CONTRACT + '\n\n' +
     'Set lat and lon to null for fully remote roles. Score fit against the candidate profile above, and ' +
     'name the specific limiting factor in watchOuts. Return at most 15 objects, best fit first.';
 }

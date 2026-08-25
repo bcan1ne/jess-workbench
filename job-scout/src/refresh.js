@@ -12,10 +12,13 @@ var path = require('path');
 var { parseResponse } = require('./parse');
 var { mergeJobs, existingUrls } = require('./merge');
 var { searchJobs } = require('./search');
+var { fetchAll, prefilter } = require('./sources');
+var { batches, scoreBatch, keepKnownUrls } = require('./score');
 
 var ROOT = path.join(__dirname, '..');
 var CONFIG_PATH = path.join(ROOT, 'config.json');
 var JOBS_PATH = path.join(ROOT, 'jobs.json');
+var COMPANIES_PATH = path.join(ROOT, 'companies.json');
 
 function readJson(file, fallback) {
   if (!fs.existsSync(file)) {
@@ -49,11 +52,39 @@ async function main() {
   var jobs = readJson(JOBS_PATH, []);
   var seen = existingUrls(jobs);
 
-  console.log('Searching with ' + seen.length + ' listing(s) already on the board.');
+  console.log('Board has ' + seen.length + ' listing(s).');
 
-  var data = await searchJobs(apiKey, cfg, seen);
-  var found = parseResponse(data);
-  console.log('Model returned ' + found.length + ' listing(s).');
+  var found = [];
+
+  // 1. Watch the known-good employers. Deterministic, and every url is theirs.
+  var companies = readJson(COMPANIES_PATH, []);
+  if (companies.length) {
+    console.log('\nPolling ' + companies.length + ' company board(s):');
+    var polled = await fetchAll(companies, null, console.log);
+    console.log(polled.postings.length + ' posting(s) total, ' +
+      polled.failures.length + ' board(s) unreachable.');
+
+    var gate = prefilter(polled.postings, cfg, seen);
+    console.log(gate.kept.length + ' past the title filter, ' + gate.dropped + ' dropped.');
+
+    for (var group of batches(gate.kept)) {
+      var scoredRaw = parseResponse(await scoreBatch(apiKey, cfg, group));
+      var scored = keepKnownUrls(scoredRaw, group);
+      if (scored.length !== scoredRaw.length) {
+        console.log('Dropped ' + (scoredRaw.length - scored.length) +
+          ' scored listing(s) whose url was not one we supplied.');
+      }
+      found = found.concat(scored);
+    }
+    console.log(found.length + ' scored from company boards.');
+  }
+
+  // 2. Search the open web for employers not on the list.
+  console.log('\nSearching the web for new employers…');
+  var searched = parseResponse(await searchJobs(apiKey, cfg, seen.concat(
+    found.map(function (j) { return j.url; }))));
+  console.log(searched.length + ' listing(s) from search.');
+  found = found.concat(searched);
 
   var result = mergeJobs(jobs, found, today());
   console.log(result.added + ' new, ' + result.skipped + ' already seen or unusable.');
