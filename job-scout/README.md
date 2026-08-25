@@ -42,7 +42,7 @@ error text before it can reach a log line.
 | `locals.json` | Hand-curated nearby employers. The workflow does not touch it. |
 | `statuses.json` | Committed statuses, written from the dashboard and shared by every browser. |
 | `src/` | The workflow's Node modules and their tests. |
-| `site/` | The dashboard — a sortable, filterable table. `github.js` starts runs and syncs statuses, `resume.js` tailors, `boards.js` reads a job link, `app.js` renders. |
+| `site/` | The dashboard — a sortable, filterable table. `github.js` starts runs and syncs statuses, `resume.js` tailors, `refine.js` learns settings and finds boards, `boards.js` reads a job link, `secrets.js` writes the repository secret, `app.js` renders. |
 | `build.js` | Stages `site/` plus the JSON into `_site/` for Pages and local preview. |
 
 ## Where listings come from
@@ -76,6 +76,33 @@ The slug is always parsed out of the URL the lookup says it found, never taken
 from the model's word for it. An invented slug would poll a dead board every
 week without ever announcing itself, which is the failure this exists to end.
 
+### The two Anthropic keys, and typing one once
+
+There are two, and the split is structural, not an oversight:
+
+- The **repository secret** `ANTHROPIC_API_KEY`, which the runner uses for the
+  weekly search. This is the one that must never reach a browser.
+- A **browser key** in `localStorage`, which the page uses for résumé tailoring,
+  learning settings from a job link, and finding a company's job board.
+
+The browser cannot borrow the first. A GitHub secret is write-only — no token,
+however privileged, can read one back — and that property is precisely what
+keeps the runner's key out of the page. So the value travels the other way:
+`secrets.js` takes the key already saved in the browser and writes it into the
+repository secret, and one key typed once serves both.
+
+The write uses libsodium's `crypto_box_seal`, which is what GitHub accepts:
+an ephemeral X25519 keypair, a nonce derived as `blake2b(ephemeral_pk ||
+recipient_pk)`, and XSalsa20-Poly1305. TweetNaCl supplies the box and blakejs
+the nonce hash; both are vendored and fetched only when the button is pressed.
+The plaintext never appears in a request body. It was cross-checked against
+libsodium itself during development — sealed here, opened by
+`crypto_box_seal_open` — and the tests pin the wire format and the BLAKE2b
+vector, which are what would silently drift.
+
+The token needs `Secrets: Read and write` for this and nothing else does, so the
+health check reports it separately and says so.
+
 ### When a run fails
 
 `refresh.js` records its own outcome into `boards.json` before it exits, so a
@@ -87,6 +114,17 @@ failure", which is a dead end for anyone not about to go and read a workflow log
 The reason is redacted with the same scrubber `search.js` uses before it is
 written, because it can contain an API error body and the repository is public.
 A test asserts the key never reaches the file.
+
+### While a search is running
+
+A run takes a couple of minutes, and until it finishes there is nothing to look
+at — a disabled button is indistinguishable from a page that has stopped
+responding. So starting a search raises an overlay that names the stage
+(waiting for a runner, searching, publishing) and keeps a clock going, which is
+the part that says it is still alive. Escape or **Hide this** dismisses it for
+the rest of the run; the run is on GitHub, so nothing is cancelled and the
+result still lands. Under `prefers-reduced-motion` the spinner and the bar stop
+animating and the stage text carries it alone.
 
 ### Adding a company
 

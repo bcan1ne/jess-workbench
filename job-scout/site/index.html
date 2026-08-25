@@ -524,6 +524,51 @@
     .complist .rowend{margin-left:0;}
   }
 
+  /* ------------------------------------------------------ run overlay */
+  .runscrim{
+    position:fixed;inset:0;z-index:60;
+    display:flex;align-items:center;justify-content:center;padding:24px;
+    background:rgba(28,26,23,.55);
+  }
+  .runcard{
+    background:var(--paper);border:1px solid var(--line-strong);border-radius:3px;
+    padding:26px 26px 20px;max-width:420px;width:100%;text-align:center;
+    box-shadow:0 8px 28px rgba(0,0,0,.18);
+  }
+  .runcard h2{
+    font-family:'Newsreader',serif;font-size:21px;font-weight:600;
+    color:var(--ink);margin:14px 0 6px;
+  }
+  .runcard p{font-family:'Archivo',sans-serif;font-size:14px;color:var(--ink-soft);margin:0;}
+  .runcard .elapsed{
+    font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--ink-faint);
+    margin-top:10px;
+  }
+  .runcard .panel-btn{margin-top:16px;}
+  .spinner{
+    width:26px;height:26px;margin:0 auto;border-radius:50%;
+    border:2px solid var(--line-strong);border-top-color:var(--tag-high);
+    animation:spin .9s linear infinite;
+  }
+  .track{
+    height:3px;margin-top:16px;border-radius:2px;overflow:hidden;
+    background:var(--line);
+  }
+  .track .bar{
+    height:100%;width:30%;border-radius:2px;background:var(--tag-high);
+    animation:slide 1.6s ease-in-out infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+  @keyframes slide{
+    0%{transform:translateX(-110%);}
+    100%{transform:translateX(360%);}
+  }
+  /* Motion is decoration here — the stage text and the clock carry the meaning. */
+  @media (prefers-reduced-motion:reduce){
+    .spinner{animation:none;border-top-color:var(--line-strong);}
+    .track .bar{animation:none;width:100%;opacity:.45;}
+  }
+
   /* ---------------------------------------------------------- qr */
   /* A link this long needs a 73-module code, and a camera needs roughly four
      screen pixels per module to read one. Anything much under 320px stops
@@ -836,7 +881,7 @@
 
   <div class="group">
     <h3>Anthropic key</h3>
-    <p class="hint">Only for tailoring. The weekly job search does not use this — it runs in GitHub Actions with its own secret.</p>
+    <p class="hint">Used here for tailoring, learning settings from a job link, and finding a company's job board. The weekly search runs in GitHub Actions and needs the same key saved there as a repository secret — <b>Send it to the repository</b> below does that for you, so you only ever type it once.</p>
     <p class="warnbox">This key lives in this browser, so anything running in it can read the key. Use a key you are willing to revoke, and revoke it if the machine is shared or lost.</p>
     <div class="keystate" id="anthState">Checking…</div>
     <form id="anthForm">
@@ -850,6 +895,11 @@
       <button class="panel-btn ui" id="saveAnthBtn" type="submit">Save key</button>
       <button class="panel-btn sub ui" id="clearAnthBtn" type="button">Remove</button>
     </form>
+
+    <div class="keystate" id="secretState" hidden></div>
+    <button class="panel-btn ui" id="pushSecretBtn" type="button">Send it to the repository</button>
+    <p class="hint" style="margin-top:9px">This writes the same key into the repository's <code>ANTHROPIC_API_KEY</code> secret, so the weekly search uses it too. It is sealed in this browser before it is sent — GitHub stores it write-only and nothing can read it back, including this page. Your token needs <b>Secrets: Read and write</b> for this; if it does not have it, the button says so.</p>
+
     <p class="hint" style="margin-top:13px;margin-bottom:0">Get one at <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com ↗</a>.</p>
   </div>
 
@@ -981,6 +1031,19 @@
   <textarea class="tout" id="tailorOut" spellcheck="false" hidden></textarea>
   <div class="tnotes" id="tailorNotes" hidden></div>
 </aside>
+
+<!-- A search takes a couple of minutes with nothing to look at. This says what
+     is happening and that it is still happening, without trapping her here. -->
+<div class="runscrim" id="runOverlay" hidden>
+  <div class="runcard" role="dialog" aria-modal="true" aria-labelledby="runStage">
+    <div class="spinner" aria-hidden="true"></div>
+    <h2 id="runStage" role="status" aria-live="polite">Starting the search…</h2>
+    <p id="runNote">Asking GitHub to run the search.</p>
+    <div class="track" aria-hidden="true"><div class="bar" id="runBar"></div></div>
+    <p class="elapsed" id="runElapsed">0:00 elapsed</p>
+    <button class="panel-btn sub ui" id="runHide" type="button">Hide this — keep searching</button>
+  </div>
+</div>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 

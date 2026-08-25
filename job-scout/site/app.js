@@ -667,6 +667,69 @@ function setRefreshLabel(text, busy){
   b.disabled=!!busy;
 }
 
+/* ------------------------------------------------------- run overlay */
+
+var RUN_UI={ timer:null, started:0, focus:null, dismissed:false };
+
+function mmss(ms){
+  var t=Math.max(0,Math.round(ms/1000));
+  return Math.floor(t/60)+':'+String(t%60).padStart(2,'0');
+}
+
+/**
+ * A search takes a couple of minutes and, until now, showed only a disabled
+ * button — indistinguishable from a page that had stopped responding. This says
+ * what stage it is at and keeps a clock running so it is visibly alive.
+ *
+ * Hiding it does not cancel anything: the run is on GitHub, not in this tab.
+ */
+function showRunOverlay(stage,note){
+  // Dismissal has to outlast the poll loop: every tick calls through here, so
+  // without this, pressing Escape would put the overlay straight back.
+  if(RUN_UI.dismissed) return;
+  var el=$('runOverlay');
+  if(el.hidden){
+    RUN_UI.focus=document.activeElement;
+    RUN_UI.started=Date.now();
+    el.hidden=false;
+    $('runHide').focus();
+    RUN_UI.timer=setInterval(function(){
+      $('runElapsed').textContent=mmss(Date.now()-RUN_UI.started)+' elapsed';
+    },1000);
+    $('runElapsed').textContent='0:00 elapsed';
+  }
+  if(stage) $('runStage').textContent=stage;
+  if(note) $('runNote').textContent=note;
+}
+
+function hideRunOverlay(){
+  var el=$('runOverlay');
+  if(el.hidden) return;
+
+  // Focus moves first. Hiding the element the user is standing on makes the
+  // browser drop focus to the body, and it does so after this runs — so
+  // focusing afterwards gets silently undone and a keyboard user is stranded.
+  //
+  // The obvious target is the button she pressed, but Refresh is disabled for
+  // the duration of the run and a disabled button cannot take focus, so the
+  // candidates are tried in order and the toolbar's other button catches it.
+  [RUN_UI.focus, $('refreshBtn'), $('settingsBtn')].some(function(el){
+    if(!el||!el.focus||el===document.body||el.disabled||!document.contains(el)) return false;
+    el.focus();
+    return document.activeElement===el;
+  });
+  RUN_UI.focus=null;
+
+  el.hidden=true;
+  if(RUN_UI.timer){ clearInterval(RUN_UI.timer); RUN_UI.timer=null; }
+}
+
+/** Dismissed by hand — stays gone until the next search is started. */
+function dismissRunOverlay(){
+  RUN_UI.dismissed=true;
+  hideRunOverlay();
+}
+
 /**
  * Starts the workflow and watches it to completion. The Anthropic key stays in
  * the runner — this only presses the button and waits.
@@ -699,6 +762,8 @@ function doRefresh(){
   var GH=window.JobScoutGitHub;
   REFRESHING=true;
   setRefreshLabel('Starting…',true);
+  RUN_UI.dismissed=false;
+  showRunOverlay('Starting the search…','Asking GitHub to run the search.');
 
   var before=null;
 
@@ -712,7 +777,9 @@ function doRefresh(){
     })
     .then(function(){
       setRefreshLabel('Searching…',true);
-      toast('Search started. This usually takes a couple of minutes.');
+      showRunOverlay('Searching…',
+        'Checking every company on your watchlist, then the open web. '+
+        'This usually takes a couple of minutes.');
       return GH.waitForRun(token,slug,before);
     })
     .then(function(runId){
@@ -723,7 +790,15 @@ function doRefresh(){
         throw new Error('GitHub started the search but it has not shown up in the run '+
           'list yet. Open View runs in Settings to follow it.');
       }
-      return GH.waitForCompletion(token,slug,runId);
+      return GH.waitForCompletion(token,slug,runId,{ onTick:function(run){
+        if(run&&run.status==='queued'){
+          showRunOverlay('Waiting for a runner…','GitHub is finding a machine to run this on.');
+        }else{
+          showRunOverlay('Searching…',
+            'Checking every company on your watchlist, then the open web. '+
+            'This usually takes a couple of minutes.');
+        }
+      } });
     })
     .then(function(run){
       if(run==null){
@@ -742,6 +817,7 @@ function doRefresh(){
         });
       }
       setRefreshLabel('Publishing…',true);
+      showRunOverlay('Publishing…','The search is done. Waiting for the new listings to appear.');
       return awaitNewListings();
     })
     .catch(function(err){
@@ -749,6 +825,7 @@ function doRefresh(){
     })
     .then(function(){
       REFRESHING=false;
+      hideRunOverlay();
       setRefreshLabel('Refresh listings',false);
     });
 }
@@ -1715,6 +1792,79 @@ function clearResume(){
   toast('Résumé removed from this browser.');
 }
 
+/* --------------------------------------------------- repository secret */
+
+function loadScript(src){
+  return new Promise(function(res,rej){
+    var el=document.createElement('script');
+    el.src=src;
+    el.onload=function(){ res(); };
+    el.onerror=function(){ rej(new Error('Could not load '+src)); };
+    document.head.appendChild(el);
+  });
+}
+
+/**
+ * The sealing libraries are 42KB and are needed once, if ever — so they are
+ * fetched when the button is pressed, not on every visit. Loaded in order:
+ * secrets.js reads nacl and blakejs off the window as it evaluates.
+ */
+var sealer=null;
+function loadSealer(){
+  if(sealer) return sealer;
+  sealer=loadScript('vendor/nacl.js')
+    .then(function(){ return loadScript('vendor/blake2b.js'); })
+    .then(function(){ return loadScript('secrets.js'); })
+    .then(function(){
+      if(!window.JobScoutSecrets) throw new Error('The sealing code did not load.');
+      return window.JobScoutSecrets;
+    }).catch(function(err){
+      sealer=null;                            // let a retry try again
+      throw err;
+    });
+  return sealer;
+}
+
+function secretState(msg,bad){
+  var el=$('secretState');
+  el.textContent=msg||'';
+  el.className='keystate'+(bad?'':' set');
+  el.hidden=!msg;
+}
+
+/**
+ * Pushes the browser's Anthropic key into the repository secret the workflow
+ * reads, so one key typed once serves both. A GitHub secret cannot be read
+ * back, so this is the only direction the value can travel.
+ */
+function pushAnthKeyToRepo(){
+  var key=readLocal(ANTH_KEY);
+  var token=readToken();
+  var slug=repoSlug();
+
+  if(!key){ secretState('Save a key above first, then send it.',true); return; }
+  if(!token||!slug){
+    secretState('This needs the GitHub token — add one under Refresh above.',true);
+    return;
+  }
+
+  var btn=$('pushSecretBtn');
+  btn.disabled=true;
+  secretState('Sealing and sending…');
+
+  loadSealer().then(function(S){
+    return S.putSecret(token,slug,'ANTHROPIC_API_KEY',key);
+  }).then(function(){
+    secretState('Saved to the repository. The next search uses this key.');
+    toast('The repository now has the same key.');
+  },function(err){
+    var GH=window.JobScoutGitHub;
+    secretState(GH.redact(err.message||String(err),token),true);
+  }).then(function(){
+    btn.disabled=false;
+  });
+}
+
 /**
  * pdf.js is 1.7MB, so it is only fetched when a PDF is actually chosen. Kept as
  * a promise so picking a second PDF does not download it twice.
@@ -1806,8 +1956,8 @@ function fillAnthState(){
   var has=!!readLocal(ANTH_KEY);
   var el=$('anthState');
   el.textContent = has
-    ? 'A key is saved in this browser — Tailor is live.'
-    : 'No key saved. Tailor will ask for one.';
+    ? 'A key is saved in this browser — Tailor and Find it again are live.'
+    : 'No key saved. Tailor and Find it again will ask for one.';
   el.className='keystate'+(has?' set':'');
   renderBanner();
 }
@@ -2192,6 +2342,13 @@ $('saveResumeBtn').addEventListener('click',saveResume);
 $('clearResumeBtn').addEventListener('click',clearResume);
 $('resumeFile').addEventListener('change',function(e){ loadResumeFile(e.target.files[0]); });
 $('clearAnthBtn').addEventListener('click',clearAnthKey);
+$('pushSecretBtn').addEventListener('click',pushAnthKeyToRepo);
+
+$('runHide').addEventListener('click',dismissRunOverlay);
+document.addEventListener('keydown',function(e){
+  // Escape dismisses the overlay only. The run is on GitHub; nothing is cancelled.
+  if(e.key==='Escape'&&!$('runOverlay').hidden) dismissRunOverlay();
+});
 $('tailorClose').addEventListener('click',closeTailor);
 $('tailorCopy').addEventListener('click',copyTailored);
 $('tailorDownload').addEventListener('click',downloadTailored);

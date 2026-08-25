@@ -250,7 +250,13 @@
         fix: 'The token cannot see the workflow. It needs the Actions permission set to Read and write.' },
       { key: 'contents', label: 'Can save statuses',
         path: '/repos/' + slug + '/contents/' + statusPath,
-        fix: 'The token cannot read the statuses file. It needs the Contents permission set to Read and write.' }
+        fix: 'The token cannot read the statuses file. It needs the Contents permission set to Read and write.' },
+      // Only needed for "Send it to the repository". Everything else works
+      // without it, so the fix says what is actually lost.
+      { key: 'secrets', label: 'Can save the Anthropic key to the repository',
+        path: '/repos/' + slug + '/actions/secrets/public-key',
+        fix: 'The token cannot manage secrets, so "Send it to the repository" will not work. ' +
+             'Everything else still does. To enable it, give the token the Secrets permission, set to Read and write.' }
     ];
 
     var repoVisible = false;

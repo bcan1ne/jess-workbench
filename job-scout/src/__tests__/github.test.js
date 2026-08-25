@@ -363,12 +363,13 @@ test('a permissions failure on write is not retried as a conflict', async functi
 
 /* ------------------------------------------------------------ token health */
 
-test('a healthy token reports all three checks green', async function () {
+test('a healthy token reports every check green', async function () {
   var out = await GH.checkToken(TOKEN, SLUG, 'job-scout/statuses.json',
     function () { return contentsRes(200, { default_branch: 'main', content: GH.b64encode('{}'), sha: 'x' }); });
-  assert.strictEqual(out.length, 3);
+  assert.strictEqual(out.length, 4);
   assert.ok(out.every(function (r) { return r.ok; }));
-  assert.deepStrictEqual(out.map(function (r) { return r.key; }), ['repo', 'actions', 'contents']);
+  assert.deepStrictEqual(out.map(function (r) { return r.key; }),
+    ['repo', 'actions', 'contents', 'secrets']);
 });
 
 test('the "Public repositories" mistake is named, not just reported as 404', async function () {
@@ -427,4 +428,24 @@ test('a token with no access at all reports every check red, not a false all-cle
   assert.ok(out.every(function (r) { return !r.ok; }),
     'a completely blind token must not report any check as working');
   assert.ok(!out.some(function (r) { return r.note; }), 'no "fresh board" note either');
+});
+
+test('the health check covers the Secrets permission, and says only the key ' +
+     'push is lost without it', async function () {
+  var probes = [];
+  var out = await GH.checkToken(TOKEN, SLUG, 'job-scout/statuses.json', function (url) {
+    probes.push(url);
+    if (url.indexOf('/actions/secrets/public-key') !== -1) return res(403, {});
+    return res(200, {});
+  });
+
+  var secrets = out.filter(function (p) { return p.key === 'secrets'; })[0];
+  assert.ok(secrets, 'secrets must be probed');
+  assert.strictEqual(secrets.ok, false);
+  assert.match(secrets.fix, /Everything else still does/);
+
+  // The rest stay green — a missing Secrets permission is not a broken board.
+  assert.deepStrictEqual(
+    out.filter(function (p) { return p.key !== 'secrets'; }).map(function (p) { return p.ok; }),
+    [true, true, true]);
 });
