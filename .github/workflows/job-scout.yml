@@ -1,0 +1,109 @@
+name: Job Scout
+
+# Weekly search, plus a manual trigger for verifying a change without waiting
+# on the cron. Pushes only rebuild the dashboard — they never spend an API call.
+on:
+  schedule:
+    # Mondays 11:00 UTC — 7am Eastern during daylight saving, 6am in winter.
+    - cron: '0 11 * * 1'
+  workflow_dispatch:
+  push:
+    paths:
+      - 'job-scout/**'
+      - '.github/workflows/job-scout.yml'
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm test
+
+  refresh:
+    name: Search and merge
+    needs: test
+    if: github.event_name != 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: job-scout-refresh
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Fails the run on a missing secret, a non-200, or unparseable JSON.
+      # Writes jobs.json only when the merge produced something new.
+      - name: Search for new listings
+        id: refresh
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: node job-scout/src/refresh.js
+
+      - name: Commit new listings
+        if: steps.refresh.outputs.added != '0'
+        run: |
+          if git diff --quiet -- job-scout/jobs.json; then
+            echo "jobs.json is unchanged — nothing to commit."
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add job-scout/jobs.json
+          git commit -m "Job Scout: add ${{ steps.refresh.outputs.added }} new listing(s)"
+          git push origin HEAD:${{ github.ref_name }}
+
+  deploy:
+    name: Publish dashboard
+    needs: [test, refresh]
+    # Runs after a search, and on a push that only touched the dashboard.
+    # A failed search stops the deploy so a red run is never published over.
+    if: |
+      always()
+      && needs.test.result == 'success'
+      && needs.refresh.result != 'failure'
+      && needs.refresh.result != 'cancelled'
+      && github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      # Take the branch tip, not the triggering SHA — the refresh job may have
+      # just committed a new jobs.json on top of it.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Stage the site
+        run: node job-scout/build.js
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: job-scout/_site
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,14 @@
+{
+  "name": "jess-workbench",
+  "private": true,
+  "type": "commonjs",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test 'job-scout/src/__tests__/*.test.js'",
+    "refresh": "node job-scout/src/refresh.js",
+    "build": "node job-scout/build.js",
+    "preview": "node job-scout/build.js --serve"
+  }
+}

@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Job Scout</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='2' fill='%23173630'/%3E%3Crect x='4' y='4' width='8' height='1.6' fill='%232e7d5b'/%3E%3Crect x='4' y='7.2' width='8' height='1.6' fill='%23c07d16'/%3E%3Crect x='4' y='10.4' width='8' height='1.6' fill='%239a5b4c'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#10231f;
+    --ink-soft:#41564f;
+    --ink-faint:#7d8f88;
+    --paper:#fbfaf7;
+    --card:#ffffff;
+    --rail:#173630;
+    --rail-deep:#0d211d;
+    --line:#e2ded4;
+    --line-strong:#cec9bc;
+    --tag-high:#2e7d5b;
+    --tag-mid:#c07d16;
+    --tag-low:#9a5b4c;
+    --focus:#2e7d5b;
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Newsreader',Georgia,serif;
+    font-size:16px;
+    line-height:1.55;
+    -webkit-font-smoothing:antialiased;
+  }
+  h1,h2,h3,button,label,th,.ui{font-family:'Archivo',system-ui,sans-serif;}
+  .mono{font-family:'IBM Plex Mono',ui-monospace,monospace;}
+
+  /* ---------------------------------------------------------- layout */
+  .shell{display:flex;min-height:100vh;}
+
+  .rail{
+    width:268px;flex:0 0 268px;
+    background:var(--rail);
+    color:#e8eeeb;
+    padding:28px 22px 24px;
+    display:flex;flex-direction:column;gap:26px;
+    position:sticky;top:0;height:100vh;overflow-y:auto;
+  }
+  .brand{font-family:'Archivo',sans-serif;font-weight:700;font-size:20px;letter-spacing:-.02em;color:#fff;}
+  .brand span{display:block;font-weight:400;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#8fb0a6;margin-top:5px;}
+
+  .main{flex:1;min-width:0;padding:34px 40px 80px;}
+
+  /* ---------------------------------------------------------- rail bits */
+  .rail-label{
+    font-family:'Archivo',sans-serif;font-size:10px;font-weight:600;
+    letter-spacing:.16em;text-transform:uppercase;color:#7ea699;
+    padding-bottom:9px;border-bottom:1px solid rgba(255,255,255,.13);margin-bottom:13px;
+  }
+  .btn{
+    font-family:'Archivo',sans-serif;font-size:13.5px;font-weight:600;
+    border:none;border-radius:3px;padding:11px 15px;cursor:pointer;
+    width:100%;text-align:left;transition:background .15s,color .15s;
+    display:block;text-decoration:none;
+  }
+  .btn-primary{background:#e8eeeb;color:var(--rail-deep);}
+  .btn-primary:hover:not(:disabled){background:#fff;}
+  .btn-primary:disabled{opacity:.55;cursor:progress;}
+  .btn-ghost{background:transparent;color:#c3d5cf;border:1px solid rgba(255,255,255,.18);margin-top:9px;}
+  .btn-ghost:hover{background:rgba(255,255,255,.07);color:#fff;}
+
+  .filters{display:flex;flex-direction:column;gap:2px;}
+  .chip{
+    background:none;border:none;text-align:left;cursor:pointer;
+    font-family:'Archivo',sans-serif;font-size:13.5px;color:#b8ccc5;
+    padding:7px 10px;border-radius:3px;border-left:2px solid transparent;
+    display:flex;justify-content:space-between;align-items:center;gap:8px;width:100%;
+  }
+  .chip:hover{background:rgba(255,255,255,.06);color:#fff;}
+  .chip[aria-pressed="true"]{background:rgba(255,255,255,.1);color:#fff;border-left-color:var(--tag-high);}
+  .chip .n{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#7ea699;}
+
+  .rail-foot{margin-top:auto;font-size:11.5px;color:#7c9d94;line-height:1.5;font-family:'Archivo',sans-serif;}
+
+  /* ---------------------------------------------------------- header */
+  .head{margin-bottom:30px;}
+  .head h1{font-size:31px;font-weight:700;letter-spacing:-.025em;margin:0 0 7px;}
+  .head p{margin:0;color:var(--ink-soft);font-size:15.5px;max-width:62ch;}
+
+  /* ---------------------------------------------------------- band */
+  .band-head{
+    display:flex;align-items:baseline;gap:13px;
+    margin:34px 0 15px;padding-bottom:9px;border-bottom:1.5px solid var(--line-strong);
+  }
+  .band-head h2{
+    font-size:12px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;margin:0;
+  }
+  .band-head .desc{font-size:13.5px;color:var(--ink-faint);font-family:'Archivo',sans-serif;}
+  .band-head .count{margin-left:auto;font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--ink-faint);}
+
+  /* ---------------------------------------------------------- card */
+  .card{
+    background:var(--card);border:1px solid var(--line);border-left:none;
+    border-radius:2px;margin-bottom:11px;display:flex;overflow:hidden;
+    opacity:0;transform:translateY(7px);
+    animation:rise .34s cubic-bezier(.22,.7,.3,1) forwards;
+  }
+  @keyframes rise{to{opacity:1;transform:none;}}
+  @media (prefers-reduced-motion:reduce){
+    .card{animation:none;opacity:1;transform:none;}
+  }
+
+  /* signature: the fit gauge */
+  .gauge{
+    flex:0 0 78px;padding:17px 0 15px;
+    display:flex;flex-direction:column;align-items:center;gap:9px;
+    border-left:4px solid var(--tone);
+    background:linear-gradient(to right,color-mix(in srgb,var(--tone) 9%,transparent),transparent);
+  }
+  .gauge .num{
+    font-family:'IBM Plex Mono',monospace;font-size:25px;font-weight:600;
+    color:var(--tone);line-height:1;letter-spacing:-.04em;
+  }
+  .gauge .scale{display:flex;flex-direction:column;gap:2px;align-items:center;}
+  .gauge .tick{width:15px;height:2px;background:var(--line-strong);}
+  .gauge .tick.on{background:var(--tone);}
+  .gauge .cap{
+    font-family:'Archivo',sans-serif;font-size:8.5px;font-weight:600;
+    letter-spacing:.11em;text-transform:uppercase;color:var(--ink-faint);
+  }
+
+  .body{flex:1;min-width:0;padding:16px 20px 17px 4px;}
+  .titleline{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;margin-bottom:3px;}
+  .titleline h3{font-family:'Archivo',sans-serif;font-size:17px;font-weight:600;letter-spacing:-.01em;margin:0;}
+  .titleline .co{font-family:'Archivo',sans-serif;font-size:13.5px;color:var(--ink-soft);font-weight:500;}
+  .titleline .co::before{content:'·';margin-right:9px;color:var(--line-strong);}
+
+  .strip{
+    display:flex;flex-wrap:wrap;gap:5px 20px;margin:9px 0 11px;
+    padding:8px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);
+  }
+  .fact{display:flex;flex-direction:column;gap:1px;}
+  .fact .k{font-family:'Archivo',sans-serif;font-size:9px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);}
+  .fact .v{font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--ink);}
+  .fact .v.warn{color:var(--tag-low);}
+  .fact .v.good{color:var(--tag-high);}
+
+  .why{font-size:15px;color:var(--ink);margin:0 0 9px;max-width:78ch;}
+  .watch{
+    font-size:14px;font-style:italic;color:var(--ink-soft);
+    border-left:2px solid var(--line-strong);padding:1px 0 1px 12px;margin:0;max-width:78ch;
+  }
+  .watch b{
+    font-family:'Archivo',sans-serif;font-style:normal;font-size:9px;font-weight:600;
+    letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);
+    display:block;margin-bottom:2px;
+  }
+
+  .actions{display:flex;align-items:center;gap:10px;margin-top:14px;flex-wrap:wrap;}
+  .open{
+    font-family:'Archivo',sans-serif;font-size:13px;font-weight:600;text-decoration:none;
+    color:var(--rail);border-bottom:1.5px solid var(--tag-high);padding-bottom:1px;
+  }
+  .open:hover{color:var(--tag-high);}
+  select{
+    font-family:'Archivo',sans-serif;font-size:12.5px;color:var(--ink);
+    background:var(--paper);border:1px solid var(--line-strong);border-radius:3px;
+    padding:5px 9px;cursor:pointer;
+  }
+  .saved{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--tag-high);opacity:0;transition:opacity .2s;}
+  .saved.show{opacity:1;}
+  @media (prefers-reduced-motion:reduce){.saved{transition:none;}}
+
+  /* ---------------------------------------------------------- local */
+  .local{margin-top:14px;border:1px solid var(--line);border-radius:2px;overflow:hidden;}
+  .local table{width:100%;border-collapse:collapse;background:var(--card);}
+  .local th{
+    font-size:9.5px;font-weight:600;letter-spacing:.13em;text-transform:uppercase;
+    color:var(--ink-faint);text-align:left;padding:10px 14px;background:#f5f2ec;
+    border-bottom:1px solid var(--line);
+  }
+  .local td{padding:11px 14px;border-bottom:1px solid var(--line);font-size:14.5px;vertical-align:top;}
+  .local tr:last-child td{border-bottom:none;}
+  .local .mi{font-family:'IBM Plex Mono',monospace;font-size:12.5px;white-space:nowrap;}
+  .local .yes{color:var(--tag-high);font-family:'IBM Plex Mono',monospace;font-size:12px;}
+  .local .no{color:var(--ink-faint);font-family:'IBM Plex Mono',monospace;font-size:12px;}
+  .local a{color:var(--rail);text-decoration:none;border-bottom:1px solid var(--line-strong);}
+  .local a:hover{color:var(--tag-high);border-bottom-color:var(--tag-high);}
+
+  /* ---------------------------------------------------------- panel */
+  .scrim{
+    position:fixed;inset:0;background:rgba(13,33,29,.42);
+    display:none;z-index:40;
+  }
+  .scrim.open{display:block;}
+  .panel{
+    position:fixed;top:0;right:0;bottom:0;width:min(460px,100%);
+    background:var(--paper);z-index:50;overflow-y:auto;padding:28px 30px 46px;
+    transform:translateX(100%);transition:transform .26s cubic-bezier(.3,.8,.3,1);
+    border-left:1px solid var(--line-strong);visibility:hidden;
+  }
+  .panel.open{transform:none;visibility:visible;}
+  @media (prefers-reduced-motion:reduce){.panel{transition:none;}}
+  .panel h2{font-size:21px;font-weight:700;letter-spacing:-.02em;margin:0 0 5px;}
+  .panel .lede{color:var(--ink-soft);font-size:14.5px;margin:0 0 24px;}
+  .group{margin-bottom:26px;padding-bottom:22px;border-bottom:1px solid var(--line);}
+  .group:last-of-type{border-bottom:none;}
+  .group h3{font-size:10.5px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;margin:0 0 4px;}
+  .group .hint{font-size:13.5px;color:var(--ink-faint);margin:0 0 15px;font-family:'Archivo',sans-serif;}
+  .group .hint a{color:var(--tag-high);}
+  .field{margin-bottom:14px;}
+  .field label{display:block;font-size:11px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:5px;}
+  .field .ro{
+    font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--ink);
+    background:var(--card);border:1px solid var(--line);border-radius:3px;
+    padding:9px 11px;word-break:break-word;line-height:1.5;
+  }
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:11px;}
+  .keystate{
+    font-family:'IBM Plex Mono',monospace;font-size:11.5px;padding:7px 10px;border-radius:3px;
+    margin-bottom:11px;background:#eef3f0;color:var(--ink-soft);line-height:1.55;
+  }
+  .keystate.set{background:#e7f2ec;color:var(--tag-high);}
+  .panel-btn{
+    font-family:'Archivo',sans-serif;font-size:13.5px;font-weight:600;cursor:pointer;
+    border-radius:3px;padding:10px 17px;border:1px solid var(--rail);
+    background:var(--rail);color:#fff;text-decoration:none;display:inline-block;
+  }
+  .panel-btn.sub{background:transparent;color:var(--ink-soft);border-color:var(--line-strong);margin-left:8px;}
+  .exportbox{
+    width:100%;font-family:'IBM Plex Mono',monospace;font-size:11.5px;line-height:1.5;
+    color:var(--ink);background:var(--card);border:1px solid var(--line-strong);
+    border-radius:3px;padding:9px 11px;min-height:110px;resize:vertical;margin-bottom:11px;
+  }
+  .exportbox:focus{outline:2px solid var(--focus);outline-offset:1px;border-color:transparent;}
+
+  /* ---------------------------------------------------------- misc */
+  .toast{
+    position:fixed;left:50%;bottom:26px;transform:translate(-50%,14px);
+    background:var(--rail-deep);color:#fff;font-family:'Archivo',sans-serif;font-size:13.5px;
+    padding:12px 20px;border-radius:3px;opacity:0;pointer-events:none;
+    transition:opacity .2s,transform .2s;z-index:60;max-width:88vw;
+  }
+  .toast.show{opacity:1;transform:translate(-50%,0);}
+  .toast.bad{background:var(--tag-low);}
+  @media (prefers-reduced-motion:reduce){.toast{transition:none;}}
+
+  .empty{
+    border:1px dashed var(--line-strong);border-radius:3px;padding:34px 28px;
+    text-align:center;color:var(--ink-soft);
+  }
+  .empty h3{font-family:'Archivo',sans-serif;font-size:16px;margin:0 0 6px;color:var(--ink);}
+  .empty p{margin:0;font-size:14.5px;}
+
+  .skeleton{height:88px;background:linear-gradient(90deg,#f2efe9,#f8f6f2,#f2efe9);
+    background-size:200% 100%;animation:sh 1.3s infinite;border-radius:2px;margin-bottom:11px;}
+  @keyframes sh{to{background-position:-200% 0;}}
+  @media (prefers-reduced-motion:reduce){.skeleton{animation:none;}}
+
+  .vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);}
+  :focus-visible{outline:2px solid var(--focus);outline-offset:2px;}
+  .rail :focus-visible{outline-color:#e8eeeb;}
+
+  @media(max-width:880px){
+    .shell{flex-direction:column;}
+    .rail{width:100%;flex:none;height:auto;position:static;flex-direction:column;padding:20px;}
+    .main{padding:24px 18px 60px;}
+    .head h1{font-size:25px;}
+    .card{flex-direction:row;}
+    .gauge{flex-basis:62px;}
+    .local{overflow-x:auto;}
+    .local table{min-width:620px;}
+  }
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <!-- ======================================================= rail -->
+  <aside class="rail">
+    <div class="brand">Job Scout<span>Search board</span></div>
+
+    <div>
+      <div class="rail-label">Actions</div>
+      <button class="btn btn-primary ui" id="exportBtn" type="button">Export statuses</button>
+      <a class="btn btn-ghost ui" id="runLink" href="#" target="_blank" rel="noopener">Run a search ↗</a>
+      <button class="btn btn-ghost ui" id="settingsBtn" type="button">Settings</button>
+    </div>
+
+    <div>
+      <div class="rail-label">Show</div>
+      <div class="filters" id="filters"></div>
+    </div>
+
+    <div class="rail-foot" id="railFoot">Loading…</div>
+  </aside>
+
+  <!-- ======================================================= main -->
+  <main class="main">
+    <div class="head">
+      <h1>What to act on today</h1>
+      <p id="lede">Listings are grouped by how closely they match the résumé. Work top down — the first band is where the odds are best.</p>
+    </div>
+
+    <div id="board" aria-live="polite">
+      <div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>
+    </div>
+
+    <div id="localWrap" style="display:none">
+      <div class="band-head">
+        <h2>Nearby employers</h2>
+        <span class="desc">Within reach for on-site work — worth a standing alert</span>
+        <span class="count mono" id="localCount"></span>
+      </div>
+      <div class="local"><table>
+        <thead><tr><th>Employer</th><th>City</th><th>Drive</th><th>In range</th><th>What to watch for</th></tr></thead>
+        <tbody id="localBody"></tbody>
+      </table></div>
+    </div>
+  </main>
+</div>
+
+<!-- ======================================================= settings -->
+<div class="scrim" id="scrim"></div>
+<aside class="panel" id="panel" role="dialog" aria-modal="true" aria-label="Settings" tabindex="-1">
+  <h2>Settings</h2>
+  <p class="lede">Everything the search uses. These are read from <span class="mono">config.json</span> in the repository — edit that file and the next run picks it up.</p>
+
+  <div class="group">
+    <h3>Statuses</h3>
+    <p class="hint">The board is a static page, so it cannot write back. Status changes are kept in this browser and stay on this device until you export them.</p>
+    <div class="keystate" id="statusState">Checking…</div>
+    <label for="exportBox" class="vh">Status JSON</label>
+    <textarea class="exportbox mono" id="exportBox" readonly spellcheck="false"></textarea>
+    <button class="panel-btn ui" id="copyBtn" type="button">Copy JSON</button>
+    <button class="panel-btn sub ui" id="clearBtn" type="button">Reset to committed</button>
+    <p class="hint" style="margin-top:13px;margin-bottom:0">To make these permanent for every device, paste the JSON into <span class="mono">job-scout/statuses.json</span> and commit it.</p>
+  </div>
+
+  <div class="group">
+    <h3>Location</h3>
+    <p class="hint">Sets the commute radius for on-site and hybrid roles.</p>
+    <div class="field"><label>Home base</label><div class="ro" id="s_homeLabel"></div></div>
+    <div class="row2">
+      <div class="field"><label>Latitude</label><div class="ro" id="s_lat"></div></div>
+      <div class="field"><label>Longitude</label><div class="ro" id="s_lon"></div></div>
+    </div>
+    <div class="row2">
+      <div class="field"><label>Radius (miles)</label><div class="ro" id="s_radius"></div></div>
+      <div class="field"><label>Road factor</label><div class="ro" id="s_multiplier"></div></div>
+    </div>
+  </div>
+
+  <div class="group">
+    <h3>What counts as a match</h3>
+    <p class="hint">These lines are handed to the search verbatim.</p>
+    <div class="field"><label>Salary floor</label><div class="ro" id="s_minSalary"></div></div>
+    <div class="field"><label>Target titles</label><div class="ro" id="s_titles"></div></div>
+    <div class="field"><label>Industry preference</label><div class="ro" id="s_industry"></div></div>
+    <div class="field"><label>Work setup</label><div class="ro" id="s_workSetup"></div></div>
+    <div class="field"><label>Rule out</label><div class="ro" id="s_hardNos"></div></div>
+    <p class="hint" style="margin-bottom:0"><a id="configLink" href="#" target="_blank" rel="noopener">Edit config.json ↗</a></p>
+  </div>
+
+  <div class="group">
+    <h3>Schedule</h3>
+    <p class="hint" id="scheduleHint">The search runs every Monday morning and adds anything new to the board. Use <b>Run a search</b> in the sidebar to trigger one now.</p>
+  </div>
+
+  <button class="panel-btn sub ui" id="closeBtn" type="button" style="margin-left:0">Close</button>
+</aside>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

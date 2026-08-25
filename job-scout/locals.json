@@ -1,0 +1,50 @@
+[
+  {
+    "employer": "Endless Mountains Health Systems",
+    "careers": "https://www.emhs-pa.org/",
+    "city": "Montrose, PA",
+    "lat": 41.8362,
+    "lon": -75.8779,
+    "note": "Closest hospital by a wide margin. Small critical-access system, so openings are infrequent and mostly clinical."
+  },
+  {
+    "employer": "United Health Services (UHS)",
+    "careers": "https://www.nyuhscareers.org/",
+    "city": "Johnson City, NY",
+    "lat": 42.1156,
+    "lon": -75.958,
+    "note": "Largest non-clinical employer in range. Watch for program manager, population health, community health, and patient experience leadership roles."
+  },
+  {
+    "employer": "Binghamton University (SUNY)",
+    "careers": "https://www.binghamtonu.edu/",
+    "city": "Binghamton, NY",
+    "lat": 42.0987,
+    "lon": -75.918,
+    "note": "Decker College of Nursing and Health Sciences. Watch for full-time lecturer, program coordinator, and grant-funded public health roles."
+  },
+  {
+    "employer": "Broome County Health Department",
+    "careers": "https://www.gobroomecounty.com/hd",
+    "city": "Binghamton, NY",
+    "lat": 42.0987,
+    "lon": -75.918,
+    "note": "Public health program supervision and WIC / maternal-child roles - the closest analogue to the Elmira Department of Health experience."
+  },
+  {
+    "employer": "Barnes-Kasson County Hospital",
+    "careers": "https://www.barneskasson.com/",
+    "city": "Susquehanna, PA",
+    "lat": 41.9445,
+    "lon": -75.5999,
+    "note": "Small independent hospital. Occasional community health, outreach, and grant-program roles."
+  },
+  {
+    "employer": "The Guthrie Clinic",
+    "careers": "https://www.guthrie.org/",
+    "city": "Sayre, PA (HQ)",
+    "lat": 41.9781,
+    "lon": -76.5152,
+    "note": "Corporate and program roles concentrate at the Sayre headquarters. In-radius Guthrie openings are mostly clinical or hourly."
+  }
+]
