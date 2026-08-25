@@ -966,6 +966,89 @@ function clearToken(){
   toast('Token removed from this browser.');
 }
 
+/* ---------------------------------------------------------- setup link */
+
+/**
+ * Credentials cannot live in the repository — GitHub revokes a leaked token
+ * within minutes, and while it lives it can rewrite the workflow that holds the
+ * Anthropic secret. A URL fragment is the one place a secret can ride safely:
+ * everything after the # is never sent to a server, so it reaches no request
+ * log, and a bookmark of it rides the browser's own sync between devices.
+ */
+
+function buildSetupLink(){
+  var payload={};
+  var t=readToken();
+  var a=readLocal(ANTH_KEY);
+  if(t) payload.t=t;
+  if(a) payload.a=a;
+  if(!Object.keys(payload).length) return '';
+
+  var base=location.origin+location.pathname;
+  return base+'#setup='+encodeURIComponent(
+    window.JobScoutGitHub.b64encode(JSON.stringify(payload)));
+}
+
+function copySetupLink(){
+  var link=buildSetupLink();
+  if(!link){ toast('Save a token or a key first — there is nothing to carry over.',true); return; }
+  $('setupLink').value=link;
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(link).then(function(){
+      toast('Setup link copied. Bookmark it in the other browser.');
+    },function(){ revealSetupLink(); });
+  }else{ revealSetupLink(); }
+}
+
+function revealSetupLink(){
+  var link=buildSetupLink();
+  if(!link){ toast('Save a token or a key first — there is nothing to carry over.',true); return; }
+  var box=$('setupLink');
+  box.value=link;
+  box.hidden=false;
+  box.focus();
+  box.select();
+}
+
+/**
+ * Consumes a #setup= fragment, then strips it from the address bar so the
+ * credentials do not sit in the visible URL or in a later share of it.
+ */
+function consumeSetupLink(){
+  var m=/[#&]setup=([^&]+)/.exec(location.hash||'');
+  if(!m) return;
+
+  // Strip first, so a decode failure still does not leave the secret on screen.
+  try{
+    history.replaceState(null,'',location.origin+location.pathname+location.search);
+  }catch(err){ location.hash=''; }
+
+  var payload;
+  try{
+    payload=JSON.parse(window.JobScoutGitHub.b64decode(decodeURIComponent(m[1])));
+  }catch(err){
+    toast('That setup link could not be read.',true);
+    return;
+  }
+  if(!payload||typeof payload!=='object'){ toast('That setup link was empty.',true); return; }
+
+  var what=[];
+  if(payload.t) what.push('a GitHub token');
+  if(payload.a) what.push('an Anthropic key');
+  if(!what.length){ toast('That setup link carried nothing.',true); return; }
+
+  // A link can arrive from anywhere, so never arm a browser silently.
+  if(!window.confirm('This link carries '+what.join(' and ')+
+      '.\n\nSave to this browser? Only continue if the link is your own.')){
+    toast('Setup link ignored. Nothing was saved.');
+    return;
+  }
+
+  if(payload.t) writeToken(payload.t);
+  if(payload.a) writeLocal(ANTH_KEY,payload.a);
+  toast('Saved '+what.join(' and ')+' to this browser.');
+}
+
 function fillExport(){
   var map=Object.assign({},DATA.committedStatuses);
   Object.keys(map).forEach(function(k){
@@ -1011,8 +1094,15 @@ function clearStatuses(){
 /* --------------------------------------------------------------- wire */
 
 $('refreshBtn').addEventListener('click',doRefresh);
-$('saveTokenBtn').addEventListener('click',saveToken);
 $('clearTokenBtn').addEventListener('click',clearToken);
+$('setupLinkBtn').addEventListener('click',copySetupLink);
+$('setupRevealBtn').addEventListener('click',revealSetupLink);
+
+// Submit rather than click, so the browser's password manager sees a real
+// credential submission and offers to save it — that is the other half of
+// getting these onto a second machine without retyping.
+$('ghForm').addEventListener('submit',function(e){ e.preventDefault(); saveToken(); });
+$('anthForm').addEventListener('submit',function(e){ e.preventDefault(); saveAnthKey(); });
 $('settingsBtn').addEventListener('click',openPanel);
 $('closeBtn').addEventListener('click',closePanel);
 $('scrim').addEventListener('click',function(){
@@ -1033,7 +1123,6 @@ $('filters').addEventListener('click',function(e){
 $('saveResumeBtn').addEventListener('click',saveResume);
 $('clearResumeBtn').addEventListener('click',clearResume);
 $('resumeFile').addEventListener('change',function(e){ loadResumeFile(e.target.files[0]); });
-$('saveAnthBtn').addEventListener('click',saveAnthKey);
 $('clearAnthBtn').addEventListener('click',clearAnthKey);
 $('tailorClose').addEventListener('click',closeTailor);
 $('tailorCopy').addEventListener('click',copyTailored);
@@ -1088,5 +1177,9 @@ document.addEventListener('keydown',function(e){
   if($('tailorPanel').classList.contains('open')) closeTailor();
   else if($('panel').classList.contains('open')) closePanel();
 });
+
+// Before load, so a browser arriving via a setup link is already armed and can
+// read the committed statuses on its very first render.
+consumeSetupLink();
 
 load();

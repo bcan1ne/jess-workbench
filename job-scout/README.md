@@ -132,9 +132,42 @@ To enable both, create a **fine-grained** personal access token at
 - Nothing else, and no other repository.
 
 Paste it into Settings → Refresh. It is kept in `localStorage` in that browser
-and is never committed. Put it in each browser you use. If it leaks, the worst
-anyone can do is start your job search or edit this repository; revoke it from
-the same settings page.
+and is never committed.
+
+### Why the token cannot just live in the repo
+
+It is tempting to hardcode it as a default so every browser has it. That does
+not work, for two independent reasons:
+
+1. **GitHub kills it.** Push protection blocks a commit containing a
+   recognisable `github_pat_*`, and secret scanning revokes any that get
+   through, usually within minutes.
+2. **It reaches further than the data does.** The token has
+   `Contents: Read and write`, which includes `.github/workflows/job-scout.yml`
+   — and that workflow runs with `ANTHROPIC_API_KEY`. Anyone holding the token
+   can rewrite the workflow to print the Anthropic key in an obfuscated form.
+   The job data being public is fine; this is not the same thing.
+
+### Getting it onto a second browser
+
+Two ways, neither of which puts it in the repository:
+
+- **Settings → Set up another browser → Copy setup link.** The credentials ride
+  in the URL fragment. Everything after the `#` is never sent over the network,
+  so it reaches no server and no request log. Open the link once in the other
+  browser, confirm the prompt, and it saves itself — then the fragment is
+  stripped from the address bar. Keep it as a bookmark and your browser's own
+  bookmark sync carries it between devices.
+- **Let a password manager hold it.** The token and key fields are real form
+  fields with `autocomplete` hints and distinct usernames, so managers store and
+  autofill them as two separate credentials.
+
+A setup link is a live credential. Bookmark it; do not email it. A browser
+arriving via one always asks before saving, so a link from someone else cannot
+arm a browser silently.
+
+If the token leaks, revoke it from the same GitHub settings page and issue a new
+one.
 
 The button starts the run, waits for it to finish, then waits for Pages to
 republish before showing new listings — usually two to three minutes end to end.

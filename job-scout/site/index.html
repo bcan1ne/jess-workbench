@@ -546,12 +546,17 @@
     <h3>Refresh</h3>
     <p class="hint">A token does two things: lets <b>Refresh listings</b> start a search, and keeps statuses in sync across every browser. The search itself still runs in GitHub Actions, so the Anthropic key never touches this page.</p>
     <div class="keystate" id="tokenState">Checking…</div>
-    <div class="field">
-      <label for="ghToken">GitHub token</label>
-      <input type="password" id="ghToken" placeholder="github_pat_… or ghp_…" autocomplete="off" spellcheck="false">
-    </div>
-    <button class="panel-btn ui" id="saveTokenBtn" type="button">Save token</button>
-    <button class="panel-btn sub ui" id="clearTokenBtn" type="button">Remove</button>
+    <form id="ghForm">
+      <input type="text" name="username" value="job-scout-github-token" autocomplete="username"
+             class="vh" readonly tabindex="-1" aria-hidden="true">
+      <div class="field">
+        <label for="ghToken">GitHub token</label>
+        <input type="password" id="ghToken" name="password" placeholder="github_pat_… or ghp_…"
+               autocomplete="current-password" spellcheck="false">
+      </div>
+      <button class="panel-btn ui" id="saveTokenBtn" type="submit">Save token</button>
+      <button class="panel-btn sub ui" id="clearTokenBtn" type="button">Remove</button>
+    </form>
     <p class="hint" style="margin-top:13px;margin-bottom:0">Create a <b>fine-grained</b> token on this repository only, with <span class="mono">Actions: Read and write</span> and <span class="mono">Contents: Read and write</span> — nothing else. It is kept in this browser, never committed. <a id="tokenLink" href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">Create one ↗</a> · <a id="actionsLink" href="#" target="_blank" rel="noopener">View runs ↗</a></p>
   </div>
 
@@ -574,13 +579,31 @@
     <p class="hint">Only for tailoring. The weekly job search does not use this — it runs in GitHub Actions with its own secret.</p>
     <p class="warnbox">This key lives in this browser, so anything running in it can read the key. Use a key you are willing to revoke, and revoke it if the machine is shared or lost.</p>
     <div class="keystate" id="anthState">Checking…</div>
-    <div class="field">
-      <label for="anthKey">Anthropic API key</label>
-      <input type="password" id="anthKey" placeholder="sk-ant-…" autocomplete="off" spellcheck="false">
-    </div>
-    <button class="panel-btn ui" id="saveAnthBtn" type="button">Save key</button>
-    <button class="panel-btn sub ui" id="clearAnthBtn" type="button">Remove</button>
+    <form id="anthForm">
+      <input type="text" name="username" value="job-scout-anthropic-key" autocomplete="username"
+             class="vh" readonly tabindex="-1" aria-hidden="true">
+      <div class="field">
+        <label for="anthKey">Anthropic API key</label>
+        <input type="password" id="anthKey" name="password" placeholder="sk-ant-…"
+               autocomplete="current-password" spellcheck="false">
+      </div>
+      <button class="panel-btn ui" id="saveAnthBtn" type="submit">Save key</button>
+      <button class="panel-btn sub ui" id="clearAnthBtn" type="button">Remove</button>
+    </form>
     <p class="hint" style="margin-top:13px;margin-bottom:0">Get one at <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com ↗</a>.</p>
+  </div>
+
+  <div class="group">
+    <h3>Set up another browser</h3>
+    <p class="hint">Credentials cannot be committed. A token in a public repository is revoked by GitHub within minutes, and until it is, it lets anyone rewrite the workflow that holds the Anthropic secret. This is the way round that.</p>
+    <p class="warnbox">The link below <b>contains your live credentials</b>. Bookmark it; do not email it or paste it anywhere. Anyone who opens it arms their browser as if it were yours.</p>
+    <div class="bar" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <button class="panel-btn ui" id="setupLinkBtn" type="button">Copy setup link</button>
+      <button class="panel-btn sub ui" id="setupRevealBtn" type="button" style="margin-left:0">Show it</button>
+    </div>
+    <label for="setupLink" class="vh">Setup link</label>
+    <textarea class="exportbox mono" id="setupLink" readonly spellcheck="false" hidden style="min-height:70px"></textarea>
+    <p class="hint" style="margin-top:13px;margin-bottom:0">Open it once in each browser and the credentials save themselves. Kept as a bookmark, your browser's own bookmark sync carries it between devices — and the part after the <span class="mono">#</span> is never sent over the network, so the secret reaches no server and no log.</p>
   </div>
 
   <div class="group">
