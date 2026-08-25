@@ -27,6 +27,11 @@
 
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;}
+
+  /* Any author `display` rule outranks the UA sheet's [hidden]{display:none},
+     so an element with one stays on screen when .hidden is set. Several here
+     have one — .banner, .panel-btn — so make the attribute win everywhere. */
+  [hidden]{display:none !important;}
   body{
     background:var(--paper);
     color:var(--ink);
@@ -414,6 +419,40 @@
     padding:9px 12px;border-radius:2px;margin:0 0 13px;color:var(--ink-soft);
   }
 
+  /* ---------------------------------------------------------- banner */
+  .banner{
+    display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;
+    background:#f6efe6;border:1px solid var(--line-strong);
+    border-left:3px solid var(--tag-mid);border-radius:2px;
+    padding:14px 16px;margin:0 0 26px;
+  }
+  .banner .text{flex:1;min-width:240px;}
+  .banner h2{
+    font-family:'Archivo',sans-serif;font-size:11px;font-weight:700;
+    letter-spacing:.14em;text-transform:uppercase;color:var(--tag-mid);margin:0 0 5px;
+  }
+  .banner p{margin:0;font-size:14.5px;color:var(--ink);max-width:74ch;}
+  .banner .why{
+    font-family:'Archivo',sans-serif;font-size:13px;color:var(--ink-soft);
+    margin-top:6px;display:block;
+  }
+  .banner .acts{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+  .banner .go{
+    font-family:'Archivo',sans-serif;font-size:13.5px;font-weight:600;cursor:pointer;
+    border-radius:3px;padding:9px 16px;border:1px solid var(--rail);
+    background:var(--rail);color:#fff;white-space:nowrap;
+  }
+  .banner .go:hover{background:var(--rail-deep);}
+  .banner .dismiss{
+    background:none;border:none;cursor:pointer;font-size:18px;line-height:1;
+    color:var(--ink-faint);padding:6px 8px;border-radius:3px;
+  }
+  .banner .dismiss:hover{color:var(--ink);background:rgba(0,0,0,.05);}
+  @media(max-width:880px){
+    .banner .acts{width:100%;}
+    .banner .go{flex:1;}
+  }
+
   /* ---------------------------------------------------------- misc */
   .toast{
     position:fixed;left:50%;bottom:26px;transform:translate(-50%,14px);
@@ -496,6 +535,18 @@
     <div class="head">
       <h1>What to act on today</h1>
       <p id="lede">Every listing in one place, best fit first. Sort by any column, and open a title to read the full note.</p>
+    </div>
+
+    <div class="banner" id="setupBanner" role="status" hidden>
+      <div class="text">
+        <h2 id="bannerTitle">Finish setting up</h2>
+        <p id="bannerBody"></p>
+        <span class="why" id="bannerWhy"></span>
+      </div>
+      <div class="acts">
+        <button class="go ui" id="bannerGo" type="button">Set it up</button>
+        <button class="dismiss ui" id="bannerDismiss" type="button" aria-label="Dismiss this notice" title="Dismiss">×</button>
+      </div>
     </div>
 
     <div id="skeleton">

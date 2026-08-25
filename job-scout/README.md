@@ -148,6 +148,17 @@ not work, for two independent reasons:
    can rewrite the workflow to print the Anthropic key in an obfuscated form.
    The job data being public is fine; this is not the same thing.
 
+### Knowing a browser is not set up
+
+A browser with nothing saved does not look unconfigured, it looks broken —
+Refresh does nothing useful, statuses quietly fail to sync, Tailor refuses. So
+the board shows a banner naming exactly what is missing, with a button that
+opens Settings focused on that field.
+
+It clears itself the moment the last piece is saved. Dismissing it is remembered
+against *which* pieces were missing, so clearing one gap and leaving another
+still speaks up, and it never nags about the same thing twice.
+
 ### Getting it onto a second browser
 
 Two ways, neither of which puts it in the repository:

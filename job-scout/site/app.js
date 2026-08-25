@@ -839,11 +839,23 @@ function downloadTailored(){
 
 /* ----------------------------------------------------------- settings */
 
-function openPanel(){
+function openPanel(focusId){
   lastFocus=document.activeElement;
   $('panel').classList.add('open');
   $('scrim').classList.add('open');
-  $('panel').focus();
+  if(focusId&&$(focusId)){
+    var el=$(focusId);
+    // Land on the field that is actually missing, not the top of the panel.
+    el.scrollIntoView({block:'center',behavior:prefersReducedMotion()?'auto':'smooth'});
+    el.focus({preventScroll:true});
+  }else{
+    $('panel').focus();
+  }
+}
+
+function prefersReducedMotion(){
+  try{ return window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
+  catch(err){ return false; }
 }
 
 function closePanel(){
@@ -867,6 +879,71 @@ function fillSettings(){
   fillAnthState();
 }
 
+/* -------------------------------------------------------------- banner */
+
+var BANNER_KEY = 'jobScout.setupDismissed.v1';
+
+/**
+ * A browser that has never been set up looks broken rather than unconfigured:
+ * Refresh does nothing useful, statuses do not sync, Tailor refuses. Say so,
+ * and put the fix one click away.
+ */
+function missingSetup(){
+  var out=[];
+  if(!readToken()){
+    out.push({
+      key:'token', field:'ghToken', label:'a GitHub token',
+      why:'Without it, Refresh listings cannot start a search and status changes stay on this device instead of syncing.'
+    });
+  }
+  if(!readLocal(RESUME_KEY)){
+    out.push({ key:'resume', field:'resumeText', label:'a résumé',
+      why:'Tailor résumé needs one to work from.' });
+  }
+  if(!readLocal(ANTH_KEY)){
+    out.push({ key:'anth', field:'anthKey', label:'an Anthropic key',
+      why:'Tailor résumé needs one to call the API.' });
+  }
+  return out;
+}
+
+function sentence(parts){
+  if(parts.length===1) return parts[0];
+  if(parts.length===2) return parts[0]+' and '+parts[1];
+  return parts.slice(0,-1).join(', ')+', and '+parts[parts.length-1];
+}
+
+function renderBanner(){
+  var missing=missingSetup();
+  var banner=$('setupBanner');
+
+  if(!missing.length){ banner.hidden=true; return; }
+
+  // Dismissal is remembered per set of missing items, so clearing one and
+  // leaving another still speaks up, and it never nags about the same thing.
+  var signature=missing.map(function(m){return m.key;}).join(',');
+  if(readLocal(BANNER_KEY)===signature){ banner.hidden=true; return; }
+
+  var blocking=missing.filter(function(m){return m.key==='token';});
+  var first=blocking.length?blocking[0]:missing[0];
+
+  $('bannerTitle').textContent=blocking.length?'Not set up yet':'Finish setting up';
+  $('bannerBody').textContent='This browser is missing '+
+    sentence(missing.map(function(m){return m.label;}))+'.';
+  $('bannerWhy').textContent=first.why+
+    ' Already set up elsewhere? Open your setup link from that browser instead.';
+
+  $('bannerGo').textContent=blocking.length?'Add the token':'Set it up';
+  $('bannerGo').setAttribute('data-focus',first.field);
+  banner.hidden=false;
+}
+
+function dismissBanner(){
+  var missing=missingSetup();
+  writeLocal(BANNER_KEY,missing.map(function(m){return m.key;}).join(','));
+  $('setupBanner').hidden=true;
+}
+
 function fillResumeState(){
   var r=readLocal(RESUME_KEY);
   var el=$('resumeState');
@@ -875,6 +952,7 @@ function fillResumeState(){
     : 'No résumé saved. Tailor will ask for one.';
   el.className='keystate'+(r?' set':'');
   if(r&&!$('resumeText').value) $('resumeText').value=r;
+  renderBanner();
 }
 
 function saveResume(){
@@ -913,6 +991,7 @@ function fillAnthState(){
     ? 'A key is saved in this browser — Tailor is live.'
     : 'No key saved. Tailor will ask for one.';
   el.className='keystate'+(has?' set':'');
+  renderBanner();
 }
 
 function saveAnthKey(){
@@ -942,6 +1021,7 @@ function fillTokenState(){
     ? 'A token is saved in this browser — Refresh listings is live.'
     : 'No token saved. Refresh listings will ask for one.';
   el.className='keystate'+(has?' set':'');
+  renderBanner();
 }
 
 function saveToken(){
@@ -1096,6 +1176,10 @@ function clearStatuses(){
 $('refreshBtn').addEventListener('click',doRefresh);
 $('clearTokenBtn').addEventListener('click',clearToken);
 $('setupLinkBtn').addEventListener('click',copySetupLink);
+$('bannerGo').addEventListener('click',function(e){
+  openPanel(e.currentTarget.getAttribute('data-focus'));
+});
+$('bannerDismiss').addEventListener('click',dismissBanner);
 $('setupRevealBtn').addEventListener('click',revealSetupLink);
 
 // Submit rather than click, so the browser's password manager sees a real
