@@ -844,9 +844,9 @@
 
     <div class="field">
       <label for="companyUrl">Add a company</label>
-      <input type="text" id="companyUrl" placeholder="Paste a link to any job at that company"
+      <input type="text" id="companyUrl" placeholder="Company name, e.g. Progyny"
              autocomplete="off" spellcheck="false">
-      <span class="fieldhint">Find one job there, copy the address from your browser, and paste it here. We work out the rest.</span>
+      <span class="fieldhint">Just type the name and it will go and find their job board. Pasting a link to a job there works too, and is instant.</span>
     </div>
     <div class="keystate" id="companyAddState" hidden></div>
     <button class="panel-btn ui" id="addCompanyBtn" type="button">Add it</button>
@@ -856,7 +856,7 @@
     <div class="keystate" id="companyState" hidden></div>
     <button class="panel-btn ui" id="saveCompaniesBtn" type="button">Save the list</button>
     <button class="panel-btn sub ui" id="revertCompaniesBtn" type="button">Undo changes</button>
-    <p class="hint" style="margin-top:13px;margin-bottom:0">Only Greenhouse, Lever and Ashby links work. Most digital-health companies use one of them. If a link is not recognised, that employer's page is not one we can watch — the web search still covers them.</p>
+    <p class="hint" style="margin-top:13px;margin-bottom:0">Only Greenhouse, Lever and Ashby can be watched directly — most digital-health companies use one of them. If a company is not on any of the three, the weekly web search still covers them; they just are not checked employer by employer. Searching by name needs an Anthropic key, and always shows you the board it found so you can check it is the right company.</p>
   </div>
 
   <div class="group">

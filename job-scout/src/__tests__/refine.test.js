@@ -204,3 +204,90 @@ test('an unparseable answer says so rather than throwing something cryptic', asy
   await assert.rejects(R.refineFrom(KEY, URL, CFG, function () { return textReply('I had a look and...'); }),
     /unexpected shape|not readable/);
 });
+
+/* ------------------------------------------- finding a board by company name */
+
+var Boards = require('../../site/boards.js');
+var parse = Boards.parseBoardUrl;
+
+function findReply(obj) {
+  return res(200, { content: [{ type: 'text', text: JSON.stringify(obj) }] });
+}
+
+test('the lookup declares web_search and names the three boards it can use', async function () {
+  var body;
+  await R.findBoard(KEY, 'Progyny', parse, function (url, opts) {
+    body = JSON.parse(opts.body);
+    return findReply({ found: true, boardUrl: 'https://job-boards.greenhouse.io/progyny', name: 'Progyny' });
+  });
+  assert.deepStrictEqual(body.tools, [{ type: 'web_search_20260209', name: 'web_search', max_uses: 5 }]);
+  assert.match(body.messages[0].content, /job-boards\.greenhouse\.io/);
+  assert.match(body.messages[0].content, /jobs\.lever\.co/);
+  assert.match(body.messages[0].content, /jobs\.ashbyhq\.com/);
+});
+
+test('the prompt forbids assembling a url from the company name', function () {
+  assert.match(R.buildFindPrompt('Progyny'),
+    /Never assemble one from the company name/);
+});
+
+test('a found board yields an entry the watchlist can use', async function () {
+  var out = await R.findBoard(KEY, 'Progyny', parse, function () {
+    return findReply({ found: true, boardUrl: 'https://job-boards.greenhouse.io/progyny/jobs/44',
+                       name: 'Progyny' });
+  });
+  assert.deepStrictEqual(
+    { found: out.found, ats: out.ats, board: out.board, name: out.name },
+    { found: true, ats: 'greenhouse', board: 'progyny', name: 'Progyny' });
+});
+
+test('the slug is parsed out of the url, never taken from the model\'s word for it', async function () {
+  // The model is asked for a url; if it also volunteers a slug we ignore it.
+  var out = await R.findBoard(KEY, 'Somewhere', parse, function () {
+    return findReply({ found: true, name: 'Somewhere', board: 'WRONG-SLUG',
+                       boardUrl: 'https://jobs.lever.co/actualslug/1' });
+  });
+  assert.strictEqual(out.board, 'actualslug');
+  assert.strictEqual(out.ats, 'lever');
+});
+
+test('a url that is not a board we can poll is refused rather than saved', async function () {
+  var out = await R.findBoard(KEY, 'Guthrie', parse, function () {
+    return findReply({ found: true, name: 'Guthrie',
+                       boardUrl: 'https://careers.guthrie.org/openings' });
+  });
+  assert.strictEqual(out.found, false);
+  assert.match(out.note, /not a board this can watch/);
+});
+
+test('a company that uses something else is reported, with what it uses', async function () {
+  var out = await R.findBoard(KEY, 'Big Hospital', parse, function () {
+    return findReply({ found: false, note: 'They appear to use Workday.' });
+  });
+  assert.strictEqual(out.found, false);
+  assert.match(out.note, /Workday/);
+});
+
+test('found:true with no url is still not found', async function () {
+  var out = await R.findBoard(KEY, 'X', parse, function () {
+    return findReply({ found: true, boardUrl: '', name: 'X' });
+  });
+  assert.strictEqual(out.found, false);
+});
+
+test('an empty name or missing key fails before spending a request', async function () {
+  var called = false;
+  var spy = function () { called = true; return findReply({ found: false }); };
+  await assert.rejects(R.findBoard('', 'X', parse, spy), /Add an Anthropic key/);
+  await assert.rejects(R.findBoard(KEY, '   ', parse, spy), /Type a company name/);
+  assert.strictEqual(called, false);
+});
+
+test('the key never leaks from a lookup failure', async function () {
+  for (var status of [401, 429, 500]) {
+    var err = await R.findBoard(KEY, 'X', parse, (function (s) {
+      return function () { return res(s, { error: { message: 'bad ' + KEY } }); };
+    })(status)).then(function () { return null; }, function (e) { return e; });
+    assert.ok(err.message.indexOf(KEY) === -1, 'key leaked in a ' + status);
+  }
+});

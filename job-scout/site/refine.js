@@ -189,10 +189,106 @@
     return out;
   }
 
+  /* ------------------------------------------------- finding a job board */
+
+  var SEARCH_TOOL = { type: 'web_search_20260209', name: 'web_search', max_uses: 5 };
+
+  function buildFindPrompt(company) {
+    return 'Find the job board for this employer: ' + company + '\n\n' +
+      'Search the web for it. Most digital-health companies host their openings on ' +
+      'Greenhouse, Lever or Ashby, at addresses that look like:\n' +
+      '  https://job-boards.greenhouse.io/<slug>\n' +
+      '  https://jobs.lever.co/<slug>\n' +
+      '  https://jobs.ashbyhq.com/<slug>\n\n' +
+      'RULES:\n' +
+      '- Return the real address you found. Never assemble one from the company name; ' +
+        'if you did not actually see it, set found to false.\n' +
+      '- Make sure it is the right company. Similar names are common.\n' +
+      '- If they host their own careers page instead of using one of those three, set ' +
+        'found to false and say which system they appear to use in note.\n\n' +
+      'Return ONLY a JSON object, no prose and no markdown fences:\n' +
+      '{"found": true, "boardUrl": "", "name": "<the company\'s proper name>", "note": ""}';
+  }
+
+  /**
+   * Looks up a company by name and returns something the watchlist can use.
+   *
+   * The slug is never taken from the model's word for it — it is parsed out of
+   * the URL the model says it found, using the same parser a pasted link goes
+   * through. An invented slug would otherwise poll a dead board every week
+   * without ever announcing itself.
+   */
+  async function findBoard(apiKey, company, parseBoardUrl, fetchImpl) {
+    if (!apiKey) throw new Error('Add an Anthropic key in Settings first.');
+    if (!company || !String(company).trim()) throw new Error('Type a company name first.');
+
+    var doFetch = fetchImpl || globalThis.fetch;
+    var res;
+    try {
+      res = await doFetch(API_URL, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: MODEL,
+          max_tokens: 2000,
+          tools: [SEARCH_TOOL],
+          messages: [{ role: 'user', content: buildFindPrompt(String(company).trim()) }]
+        })
+      });
+    } catch (err) {
+      throw new Error('Could not reach Anthropic: ' + redact(err.message, apiKey));
+    }
+
+    if (!res.ok) {
+      var e = new Error(describeError(res.status));
+      e.status = res.status;
+      throw e;
+    }
+
+    var data = await res.json();
+    var text = extractText(data);
+    var cleaned = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    var start = cleaned.indexOf('{');
+    var end = cleaned.lastIndexOf('}');
+    if (start === -1 || end === -1) throw new Error('The answer came back in an unexpected shape.');
+
+    var out;
+    try { out = JSON.parse(cleaned.slice(start, end + 1)); }
+    catch (err) { throw new Error('The answer was not readable. Try again.'); }
+
+    if (!out.found || !out.boardUrl) {
+      return { found: false, note: out.note ||
+        'No Greenhouse, Lever or Ashby board turned up for that name.' };
+    }
+
+    var parsed = parseBoardUrl(out.boardUrl);
+    if (!parsed) {
+      return { found: false, note: 'What came back (' + String(out.boardUrl).slice(0, 80) +
+        ') is not a board this can watch.' };
+    }
+
+    return {
+      found: true,
+      ats: parsed.ats,
+      board: parsed.board,
+      name: String(out.name || company).trim(),
+      boardUrl: out.boardUrl,
+      note: out.note || ''
+    };
+  }
+
   return {
     API_URL: API_URL,
     MODEL: MODEL,
     FETCH_TOOL: FETCH_TOOL,
+    SEARCH_TOOL: SEARCH_TOOL,
+    buildFindPrompt: buildFindPrompt,
+    findBoard: findBoard,
     EDITABLE: EDITABLE,
     redact: redact,
     describeError: describeError,

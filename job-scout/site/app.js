@@ -1019,34 +1019,85 @@ function companyAddState(msg,bad){
   el.hidden=!msg;
 }
 
+/** Puts one company on the list, unless it is already there. */
+function pushCompany(entry){
+  var already=(DATA.companies||[]).filter(function(c){
+    return c.ats===entry.ats&&String(c.board).toLowerCase()===String(entry.board).toLowerCase();
+  })[0];
+  if(already){
+    companyAddState((already.name||entry.board)+' is already on the list.',true);
+    return false;
+  }
+  DATA.companies=(DATA.companies||[]).concat([entry]);
+  renderCompanies();
+  companyAddState('Added '+entry.name+' — choose Save the list to keep it.');
+  return true;
+}
+
+var FINDING=false;
+
+/**
+ * Takes a job link or just a company name. A link is parsed on the spot; a name
+ * has to be looked up, which needs the Anthropic key — finding a Greenhouse
+ * address by hand is exactly the chore this is meant to remove.
+ */
 function addCompany(){
   var B=window.JobScoutBoards;
   var field=$('companyUrl');
   var raw=field.value.trim();
-  if(!raw){ companyAddState('Paste a link to a job at that company first.',true); return; }
+  if(!raw){ companyAddState('Type a company name, or paste a link to a job there.',true); return; }
 
   var found=B.parseBoardUrl(raw);
-  if(!found){
+  if(found){
+    if(pushCompany({ name:B.guessName(found.board), ats:found.ats, board:found.board })){
+      field.value='';
+    }
+    return;
+  }
+
+  // A web address that is not a board we can poll is a dead end, not a name.
+  if(/^https?:\/\//i.test(raw)||/\.[a-z]{2,}(\/|$)/i.test(raw)){
     companyAddState('That link is not a Greenhouse, Lever or Ashby job page, so there is '+
-      'no page to watch. The web search still covers that employer.',true);
+      'no page to watch directly. Try typing just the company name instead — '+
+      'or leave it out; the web search still covers them.',true);
     return;
   }
 
-  var already=(DATA.companies||[]).filter(function(c){
-    return c.ats===found.ats&&String(c.board).toLowerCase()===found.board;
-  })[0];
-  if(already){
-    companyAddState((already.name||found.board)+' is already on the list.',true);
-    field.value='';
+  lookUpCompany(raw);
+}
+
+function lookUpCompany(name){
+  if(FINDING) return;
+  var key=readLocal(ANTH_KEY);
+  if(!key){
+    companyAddState('To find a company by name this needs an Anthropic key — add one '+
+      'under Anthropic key below. Or paste a link to a job there instead.',true);
     return;
   }
 
-  DATA.companies=(DATA.companies||[]).concat([{
-    name:B.guessName(found.board), ats:found.ats, board:found.board
-  }]);
-  field.value='';
-  renderCompanies();
-  companyAddState('Added '+B.guessName(found.board)+' — choose Save the list to keep it.');
+  FINDING=true;
+  $('addCompanyBtn').disabled=true;
+  companyAddState('Looking for '+name+"'s job board…");
+
+  var B=window.JobScoutBoards;
+  var R=window.JobScoutRefine;
+
+  R.findBoard(key,name,B.parseBoardUrl).then(function(out){
+    if(!out.found){
+      companyAddState(out.note,true);
+      return;
+    }
+    if(pushCompany({ name:out.name, ats:out.ats, board:out.board })){
+      $('companyUrl').value='';
+      companyAddState('Found '+out.name+' on '+B.label(out.ats)+
+        ' — check the link in the list is right, then Save the list.');
+    }
+  },function(err){
+    companyAddState(R.redact(err.message||String(err),key),true);
+  }).then(function(){
+    FINDING=false;
+    $('addCompanyBtn').disabled=false;
+  });
 }
 
 function dropCompany(i){

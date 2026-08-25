@@ -60,12 +60,24 @@ The two complement each other: search discovers, the watchlist watches.
 
 ### Adding a company
 
-In **Settings → Companies to keep an eye on**, paste a link to any job at that
-employer. The ATS and the employer's slug are both sitting in that link, so
-there is nothing to look up — Greenhouse, Lever and Ashby links are all
-recognised, including the `eu.` hosts and Greenhouse's embedded-board form. A
-link that is not one of those is refused with an explanation rather than saved
-as a company that can never be polled.
+In **Settings → Companies to keep an eye on**, either:
+
+- **Type the company name.** It searches for their job board and adds it. This
+  needs the Anthropic key, and it always shows the board it found so you can
+  check it is the right company — similar names are common.
+- **Paste a link to any job there.** Instant, and needs no key: the ATS and the
+  employer's slug are both sitting in that link. Greenhouse, Lever and Ashby are
+  recognised, including the `eu.` hosts and Greenhouse's embedded-board form.
+
+Looking up by name never trusts the model's word for the slug. It is parsed out
+of the URL the model says it found, through the same parser a pasted link goes
+through — an invented slug would otherwise poll a dead board every week without
+ever announcing itself. A URL that is not one of the three is refused rather
+than saved.
+
+A company on some other system (Workday, iCIMS, a hand-rolled careers page)
+cannot be watched employer by employer, and says so. The weekly web search still
+covers them.
 
 The guessed name is editable, because it is what shows in the board's Company
 column: `pomelohealth` guesses to "Pomelohealth", and only a person knows it
