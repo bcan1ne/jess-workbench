@@ -157,6 +157,8 @@ function wireLinks(){
   $('actionsLink').href=slug?base+'/actions/workflows/job-scout.yml':base;
   $('configLink').href=slug?base+'/blob/HEAD/job-scout/config.json':base;
   if(slug) $('tokenLink').href='https://github.com/settings/personal-access-tokens/new';
+  // Name the repository in the walkthrough so there is nothing to guess at.
+  if(slug) $('repoNameHint').textContent=slug.split('/')[1];
 }
 
 /* -------------------------------------------------------------- load */
@@ -927,13 +929,36 @@ function renderBanner(){
   var blocking=missing.filter(function(m){return m.key==='token';});
   var first=blocking.length?blocking[0]:missing[0];
 
-  $('bannerTitle').textContent=blocking.length?'Not set up yet':'Finish setting up';
-  $('bannerBody').textContent='This browser is missing '+
-    sentence(missing.map(function(m){return m.label;}))+'.';
-  $('bannerWhy').textContent=first.why+
-    ' Already set up elsewhere? Open your setup link from that browser instead.';
+  // The setup link only carries the sign-in bits. Once those are in, pasting
+  // another one cannot help, so the row goes away and the wording changes.
+  var linkHelps=missing.some(function(m){return m.key==='token'||m.key==='anth';});
+  $('bannerLinkRow').hidden=!linkHelps;
+  if(!linkHelps) bannerError('');
 
-  $('bannerGo').textContent=blocking.length?'Add the token':'Set it up';
+  if(blocking.length){
+    $('bannerTitle').textContent='Not set up yet';
+    $('bannerBody').textContent=
+      'This browser cannot start a search yet, and anything you mark here will not ' +
+      'show up on your other devices.';
+    $('bannerWhy').textContent=
+      'The quick way: on a device where the board already works, open Settings → ' +
+      'Set up another browser → Copy setup link, then paste it above. Nothing else to fill in.';
+  }else if(linkHelps){
+    $('bannerTitle').textContent='Almost there';
+    $('bannerBody').textContent=
+      'The board is working. Tailor résumé still needs ' +
+      sentence(missing.map(function(m){return m.label;}))+'.';
+    $('bannerWhy').textContent=
+      'A setup link from another device fills in the key. Paste one above, or add it by hand.';
+  }else{
+    $('bannerTitle').textContent='Almost there';
+    $('bannerBody').textContent=
+      'The board is working. Tailor résumé needs a résumé to work from.';
+    $('bannerWhy').textContent=
+      'Paste it in Settings → Résumé. It stays on this device and is never uploaded anywhere but Claude.';
+  }
+
+  $('bannerGo').textContent=linkHelps?'No link? Set it up by hand':'Add the résumé';
   $('bannerGo').setAttribute('data-focus',first.field);
   banner.hidden=false;
 }
@@ -942,6 +967,46 @@ function dismissBanner(){
   var missing=missingSetup();
   writeLocal(BANNER_KEY,missing.map(function(m){return m.key;}).join(','));
   $('setupBanner').hidden=true;
+}
+
+/**
+ * Proves the token works before she finds out the hard way. A token with the
+ * wrong permissions otherwise looks fine and then silently fails to save.
+ */
+function checkToken(){
+  var token=readToken();
+  var slug=repoSlug();
+  var list=$('tokenCheck');
+
+  if(!token){ toast('Save a token first.',true); return; }
+  if(!slug){ toast('No repository configured — set "repo" in config.json.',true); return; }
+
+  list.hidden=false;
+  list.innerHTML='<li class="wait">Checking…</li>';
+  $('checkTokenBtn').disabled=true;
+
+  window.JobScoutGitHub.checkToken(token,slug,STATUS_PATH).then(function(results){
+    list.innerHTML=results.map(function(r){
+      return '<li class="'+(r.ok?'yes':'no')+'">'+esc(r.label)+
+        (r.note?' <span class="note">('+esc(r.note)+')</span>':'')+
+        (r.ok?'':'<span class="fix">'+esc(r.fix)+'</span>')+'</li>';
+    }).join('');
+
+    var bad=results.filter(function(r){return !r.ok;});
+    if(!bad.length){
+      list.innerHTML+='<li class="yes">Everything this board needs is working.'+
+        '<span class="fix">Saving is only fully proven the first time you change a status, '+
+        'but read access on all three checked out.</span></li>';
+      toast('Token looks good.');
+    }else{
+      toast(bad.length+' problem'+(bad.length===1?'':'s')+' with that token — see Settings.',true);
+    }
+  },function(err){
+    list.innerHTML='<li class="no">Could not check the token'+
+      '<span class="fix">'+esc(window.JobScoutGitHub.redact(err.message||String(err),token))+'</span></li>';
+  }).then(function(){
+    $('checkTokenBtn').disabled=false;
+  });
 }
 
 function fillResumeState(){
@@ -1094,39 +1159,86 @@ function revealSetupLink(){
  * Consumes a #setup= fragment, then strips it from the address bar so the
  * credentials do not sit in the visible URL or in a later share of it.
  */
+/**
+ * Reads a setup link. Accepts the whole URL, just the fragment, or the bare
+ * payload, because what lands in a paste box depends on how it was shared.
+ * Returns { ok, saved:[labels] } or { ok:false, reason }.
+ */
+function readSetupPayload(raw){
+  var text=String(raw||'').trim();
+  if(!text) return { ok:false, reason:'Paste the setup link first.' };
+
+  var m=/[#&?]setup=([^&\s]+)/.exec(text);
+  var encoded=m?m[1]:text;
+
+  var payload;
+  try{
+    payload=JSON.parse(window.JobScoutGitHub.b64decode(decodeURIComponent(encoded)));
+  }catch(err){
+    return { ok:false, reason:'That does not look like a setup link. Copy it again from the other browser.' };
+  }
+  if(!payload||typeof payload!=='object'){
+    return { ok:false, reason:'That setup link was empty.' };
+  }
+
+  var what=[];
+  if(payload.t) what.push('a GitHub token');
+  if(payload.a) what.push('an Anthropic key');
+  if(!what.length) return { ok:false, reason:'That setup link carried nothing.' };
+
+  return { ok:true, payload:payload, labels:what };
+}
+
+function saveSetupPayload(payload){
+  if(payload.t) writeToken(payload.t);
+  if(payload.a) writeLocal(ANTH_KEY,payload.a);
+  fillSettings();
+}
+
+/** Applies a link the person pasted themselves — the paste is the consent. */
+function applyPastedSetupLink(){
+  var field=$('bannerLink');
+  var res=readSetupPayload(field.value);
+  if(!res.ok){ bannerError(res.reason); return; }
+
+  saveSetupPayload(res.payload);
+  field.value='';
+  bannerError('');
+  toast('Done — this browser is set up.');
+  if(repoSlug()&&readToken()){
+    branchOf(readToken(),repoSlug()).then(syncStatuses,function(){ /* reported on use */ });
+  }
+}
+
+function bannerError(msg){
+  var el=$('bannerError');
+  el.textContent=msg||'';
+  el.hidden=!msg;
+}
+
+/** Applies a link that was opened rather than pasted, so it must be confirmed. */
 function consumeSetupLink(){
-  var m=/[#&]setup=([^&]+)/.exec(location.hash||'');
-  if(!m) return;
+  if(!/[#&]setup=/.test(location.hash||'')) return;
+  var hash=location.hash;
 
   // Strip first, so a decode failure still does not leave the secret on screen.
   try{
     history.replaceState(null,'',location.origin+location.pathname+location.search);
   }catch(err){ location.hash=''; }
 
-  var payload;
-  try{
-    payload=JSON.parse(window.JobScoutGitHub.b64decode(decodeURIComponent(m[1])));
-  }catch(err){
-    toast('That setup link could not be read.',true);
-    return;
-  }
-  if(!payload||typeof payload!=='object'){ toast('That setup link was empty.',true); return; }
-
-  var what=[];
-  if(payload.t) what.push('a GitHub token');
-  if(payload.a) what.push('an Anthropic key');
-  if(!what.length){ toast('That setup link carried nothing.',true); return; }
+  var res=readSetupPayload(hash);
+  if(!res.ok){ toast(res.reason,true); return; }
 
   // A link can arrive from anywhere, so never arm a browser silently.
-  if(!window.confirm('This link carries '+what.join(' and ')+
+  if(!window.confirm('This link carries '+res.labels.join(' and ')+
       '.\n\nSave to this browser? Only continue if the link is your own.')){
     toast('Setup link ignored. Nothing was saved.');
     return;
   }
 
-  if(payload.t) writeToken(payload.t);
-  if(payload.a) writeLocal(ANTH_KEY,payload.a);
-  toast('Saved '+what.join(' and ')+' to this browser.');
+  if(res.payload.t) writeToken(res.payload.t);
+  if(res.payload.a) writeLocal(ANTH_KEY,res.payload.a);
+  toast('Saved '+res.labels.join(' and ')+' to this browser.');
 }
 
 function fillExport(){
@@ -1180,6 +1292,24 @@ $('bannerGo').addEventListener('click',function(e){
   openPanel(e.currentTarget.getAttribute('data-focus'));
 });
 $('bannerDismiss').addEventListener('click',dismissBanner);
+$('checkTokenBtn').addEventListener('click',checkToken);
+$('bannerApply').addEventListener('click',applyPastedSetupLink);
+$('bannerLink').addEventListener('keydown',function(e){
+  if(e.key==='Enter'){ e.preventDefault(); applyPastedSetupLink(); }
+});
+
+// Getting the link into the box is the whole interaction, so finish the job as
+// soon as the text makes sense. Watching `input` rather than `paste` covers
+// autofill, drag-and-drop and typing too — and staying silent until it parses
+// means half-typed text never produces an error.
+var bannerLinkTimer=null;
+$('bannerLink').addEventListener('input',function(){
+  bannerError('');
+  clearTimeout(bannerLinkTimer);
+  bannerLinkTimer=setTimeout(function(){
+    if(readSetupPayload($('bannerLink').value).ok) applyPastedSetupLink();
+  },250);
+});
 $('setupRevealBtn').addEventListener('click',revealSetupLink);
 
 // Submit rather than click, so the browser's password manager sees a real

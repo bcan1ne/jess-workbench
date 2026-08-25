@@ -350,3 +350,71 @@ test('a permissions failure on write is not retried as a conflict', async functi
     /Actions: Read and write/);
   assert.strictEqual(puts, 1, 'a 403 must fail fast');
 });
+
+/* ------------------------------------------------------------ token health */
+
+test('a healthy token reports all three checks green', async function () {
+  var out = await GH.checkToken(TOKEN, SLUG, 'job-scout/statuses.json',
+    function () { return contentsRes(200, { default_branch: 'main', content: GH.b64encode('{}'), sha: 'x' }); });
+  assert.strictEqual(out.length, 3);
+  assert.ok(out.every(function (r) { return r.ok; }));
+  assert.deepStrictEqual(out.map(function (r) { return r.key; }), ['repo', 'actions', 'contents']);
+});
+
+test('the "Public repositories" mistake is named, not just reported as 404', async function () {
+  var out = await GH.checkToken(TOKEN, SLUG, 'job-scout/statuses.json',
+    function () { return contentsRes(404, {}); });
+  assert.strictEqual(out[0].ok, false);
+  assert.match(out[0].fix, /Only select repositories/);
+});
+
+test('a token missing Actions is told exactly which permission to change', async function () {
+  var out = await GH.checkToken(TOKEN, SLUG, 'job-scout/statuses.json', function (url) {
+    if (url.indexOf('/actions/') !== -1) return contentsRes(403, {});
+    return contentsRes(200, { content: GH.b64encode('{}'), sha: 'x' });
+  });
+  var actions = out.filter(function (r) { return r.key === 'actions'; })[0];
+  assert.strictEqual(actions.ok, false);
+  assert.match(actions.fix, /Actions permission set to Read and write/);
+  assert.strictEqual(out.filter(function (r) { return r.key === 'contents'; })[0].ok, true,
+    'one failing probe must not fail the others');
+});
+
+test('a token missing Contents is told which permission to change', async function () {
+  var out = await GH.checkToken(TOKEN, SLUG, 'job-scout/statuses.json', function (url) {
+    if (url.indexOf('/contents/') !== -1) return contentsRes(403, {});
+    return contentsRes(200, {});
+  });
+  var contents = out.filter(function (r) { return r.key === 'contents'; })[0];
+  assert.strictEqual(contents.ok, false);
+  assert.match(contents.fix, /Contents permission set to Read and write/);
+});
+
+test('a board with no statuses yet is healthy, not broken', async function () {
+  // 404 on the statuses file means nothing has been saved, which is the normal
+  // starting state — it must not be reported as a permissions problem.
+  var out = await GH.checkToken(TOKEN, SLUG, 'job-scout/statuses.json', function (url) {
+    if (url.indexOf('/contents/') !== -1) return contentsRes(404, {});
+    return contentsRes(200, {});
+  });
+  var contents = out.filter(function (r) { return r.key === 'contents'; })[0];
+  assert.strictEqual(contents.ok, true);
+  assert.match(contents.note, /no statuses saved yet/);
+});
+
+test('a rejected token fails every check with the 401 message', async function () {
+  var out = await GH.checkToken(TOKEN, SLUG, 'job-scout/statuses.json',
+    function () { return contentsRes(401, {}); });
+  assert.ok(out.every(function (r) { return !r.ok; }));
+  assert.match(out[0].detail, /token was rejected/);
+});
+
+test('a token with no access at all reports every check red, not a false all-clear', async function () {
+  // GitHub 404s on everything when a token cannot see the repository, so the
+  // "missing statuses file" leniency must not turn that into a green tick.
+  var out = await GH.checkToken(TOKEN, SLUG, 'job-scout/statuses.json',
+    function () { return contentsRes(404, {}); });
+  assert.ok(out.every(function (r) { return !r.ok; }),
+    'a completely blind token must not report any check as working');
+  assert.ok(!out.some(function (r) { return r.note; }), 'no "fresh board" note either');
+});

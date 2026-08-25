@@ -419,6 +419,40 @@
     padding:9px 12px;border-radius:2px;margin:0 0 13px;color:var(--ink-soft);
   }
 
+  /* ---------------------------------------------------------- how-to */
+  .howto{
+    border:1px solid var(--line);border-radius:3px;background:var(--card);
+    padding:0 12px;margin:0 0 13px;
+  }
+  .howto summary{
+    font-family:'Archivo',sans-serif;font-size:13px;font-weight:600;color:var(--rail);
+    cursor:pointer;padding:10px 0;list-style:none;
+  }
+  .howto summary::-webkit-details-marker{display:none;}
+  .howto summary::before{content:'▸ ';font-family:'IBM Plex Mono',monospace;font-size:11px;}
+  .howto[open] summary::before{content:'▾ ';}
+  .howto summary:hover{color:var(--tag-high);}
+  .howto ol{margin:0 0 12px;padding-left:20px;font-size:13.5px;line-height:1.65;color:var(--ink);}
+  .howto ol > li{margin-bottom:8px;}
+  .howto ul{margin:5px 0;padding-left:18px;}
+  .howto i{color:var(--tag-low);font-size:12.5px;}
+
+  .checklist{list-style:none;margin:11px 0 0;padding:0;}
+  .checklist li{
+    font-family:'Archivo',sans-serif;font-size:13px;line-height:1.5;
+    padding:7px 0 7px 22px;position:relative;border-bottom:1px solid var(--line);
+  }
+  .checklist li:last-child{border-bottom:none;}
+  .checklist li::before{
+    position:absolute;left:0;top:7px;font-family:'IBM Plex Mono',monospace;font-size:12px;
+  }
+  .checklist li.yes::before{content:'✓';color:var(--tag-high);}
+  .checklist li.no::before{content:'✕';color:var(--tag-low);}
+  .checklist li.wait::before{content:'…';color:var(--ink-faint);}
+  .checklist li.no{color:var(--tag-low);}
+  .checklist .fix{display:block;color:var(--ink-soft);font-size:12.5px;margin-top:3px;}
+  .checklist .note{color:var(--ink-faint);}
+
   /* ---------------------------------------------------------- banner */
   .banner{
     display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;
@@ -436,20 +470,34 @@
     font-family:'Archivo',sans-serif;font-size:13px;color:var(--ink-soft);
     margin-top:6px;display:block;
   }
-  .banner .acts{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+  .banner .linkrow{display:flex;gap:8px;margin:12px 0 0;flex-wrap:wrap;}
+  .banner .linkrow input{
+    flex:1;min-width:220px;font-family:'Archivo',sans-serif;font-size:14px;color:var(--ink);
+    background:var(--card);border:1px solid var(--line-strong);border-radius:3px;padding:9px 12px;
+  }
+  .banner .linkrow input:focus{outline:2px solid var(--focus);outline-offset:1px;border-color:transparent;}
   .banner .go{
     font-family:'Archivo',sans-serif;font-size:13.5px;font-weight:600;cursor:pointer;
-    border-radius:3px;padding:9px 16px;border:1px solid var(--rail);
+    border-radius:3px;padding:9px 20px;border:1px solid var(--rail);
     background:var(--rail);color:#fff;white-space:nowrap;
   }
   .banner .go:hover{background:var(--rail-deep);}
+  .banner .err{
+    font-family:'Archivo',sans-serif;font-size:13px;color:var(--tag-low);margin:8px 0 0;
+  }
+  .banner .alt{margin-top:10px;}
+  .banner .linkish{
+    background:none;border:none;padding:0;cursor:pointer;
+    font-family:'Archivo',sans-serif;font-size:13px;color:var(--ink-soft);
+    text-decoration:underline;text-underline-offset:2px;
+  }
+  .banner .linkish:hover{color:var(--tag-high);}
   .banner .dismiss{
     background:none;border:none;cursor:pointer;font-size:18px;line-height:1;
-    color:var(--ink-faint);padding:6px 8px;border-radius:3px;
+    color:var(--ink-faint);padding:6px 8px;border-radius:3px;align-self:flex-start;
   }
   .banner .dismiss:hover{color:var(--ink);background:rgba(0,0,0,.05);}
   @media(max-width:880px){
-    .banner .acts{width:100%;}
     .banner .go{flex:1;}
   }
 
@@ -539,14 +587,23 @@
 
     <div class="banner" id="setupBanner" role="status" hidden>
       <div class="text">
-        <h2 id="bannerTitle">Finish setting up</h2>
+        <h2 id="bannerTitle">Not set up yet</h2>
         <p id="bannerBody"></p>
+
+        <div class="linkrow" id="bannerLinkRow">
+          <label for="bannerLink" class="vh">Paste your setup link</label>
+          <input type="password" id="bannerLink" placeholder="Paste your setup link here"
+                 autocomplete="off" spellcheck="false">
+          <button class="go ui" id="bannerApply" type="button">Use it</button>
+        </div>
+        <p class="err" id="bannerError" hidden></p>
+
         <span class="why" id="bannerWhy"></span>
+        <div class="alt">
+          <button class="linkish ui" id="bannerGo" type="button">No link? Set it up by hand</button>
+        </div>
       </div>
-      <div class="acts">
-        <button class="go ui" id="bannerGo" type="button">Set it up</button>
-        <button class="dismiss ui" id="bannerDismiss" type="button" aria-label="Dismiss this notice" title="Dismiss">×</button>
-      </div>
+      <button class="dismiss ui" id="bannerDismiss" type="button" aria-label="Dismiss this notice" title="Dismiss">×</button>
     </div>
 
     <div id="skeleton">
@@ -595,8 +652,24 @@
 
   <div class="group">
     <h3>Refresh</h3>
-    <p class="hint">A token does two things: lets <b>Refresh listings</b> start a search, and keeps statuses in sync across every browser. The search itself still runs in GitHub Actions, so the Anthropic key never touches this page.</p>
+    <p class="hint">A GitHub token is what lets this page start a search and remember which jobs you have applied to, on every device. It is like a house key for this one board — nothing else.</p>
+    <p class="hint" style="margin-bottom:9px"><b>Already have the board working somewhere else?</b> You do not need any of this. Get a setup link from that device instead — see <i>Set up another browser</i> below.</p>
     <div class="keystate" id="tokenState">Checking…</div>
+    <details class="howto">
+      <summary>How to make one, step by step</summary>
+      <ol>
+        <li>Open <a id="tokenLink" href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">this GitHub page ↗</a> (sign in if it asks).</li>
+        <li><b>Token name</b> — type anything, for example <span class="mono">job board</span>.</li>
+        <li><b>Expiration</b> — pick the longest option offered. When it runs out the board stops saving and you make a new one.</li>
+        <li><b>Repository access</b> — choose <b>Only select repositories</b>, then pick <span class="mono" id="repoNameHint">this repository</span>.<br>
+            <i>Do not leave it on "Public repositories" — that one is read-only and will not work.</i></li>
+        <li><b>Permissions</b> → <b>Repository permissions</b>. Find these two and set both to <b>Read and write</b>:
+          <ul><li><span class="mono">Actions</span></li><li><span class="mono">Contents</span></li></ul>
+          Leave everything else alone. <span class="mono">Metadata</span> turns itself on — that is expected.</li>
+        <li>Scroll down, press <b>Generate token</b>, and copy the long <span class="mono">github_pat_…</span> line straight away. GitHub only shows it once.</li>
+        <li>Paste it in the box below and press <b>Save token</b>.</li>
+      </ol>
+    </details>
     <form id="ghForm">
       <input type="text" name="username" value="job-scout-github-token" autocomplete="username"
              class="vh" readonly tabindex="-1" aria-hidden="true">
@@ -608,7 +681,11 @@
       <button class="panel-btn ui" id="saveTokenBtn" type="submit">Save token</button>
       <button class="panel-btn sub ui" id="clearTokenBtn" type="button">Remove</button>
     </form>
-    <p class="hint" style="margin-top:13px;margin-bottom:0">Create a <b>fine-grained</b> token on this repository only, with <span class="mono">Actions: Read and write</span> and <span class="mono">Contents: Read and write</span> — nothing else. It is kept in this browser, never committed. <a id="tokenLink" href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">Create one ↗</a> · <a id="actionsLink" href="#" target="_blank" rel="noopener">View runs ↗</a></p>
+    <div class="bar" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:11px">
+      <button class="panel-btn sub ui" id="checkTokenBtn" type="button" style="margin-left:0">Check it works</button>
+    </div>
+    <ul class="checklist" id="tokenCheck" hidden></ul>
+    <p class="hint" style="margin-top:13px;margin-bottom:0">The token stays in this browser and is never saved into the repository. If you ever think it has got out, delete it on GitHub and make a new one. <a id="actionsLink" href="#" target="_blank" rel="noopener">See past searches ↗</a></p>
   </div>
 
   <div class="group">

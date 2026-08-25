@@ -224,8 +224,56 @@
     return attempt(0);
   }
 
+  /* ------------------------------------------------------------- health */
+
+  /**
+   * Answers "is this token actually going to work?" in terms a person can act
+   * on, instead of letting them find out when a status change silently fails.
+   *
+   * Read access is probed directly. Write access cannot be probed without
+   * writing, so it is reported as unproven rather than guessed at — the first
+   * real save reports it properly.
+   */
+  function checkToken(token, slug, statusPath, fetchImpl) {
+    var probes = [
+      { key: 'repo', label: 'Can see the repository',
+        path: '/repos/' + slug,
+        fix: 'The token cannot see this repository. When creating it, choose "Only select repositories" and pick this one.' },
+      { key: 'actions', label: 'Can start a search',
+        path: '/repos/' + slug + '/actions/workflows/' + WORKFLOW,
+        fix: 'The token cannot see the workflow. It needs the Actions permission set to Read and write.' },
+      { key: 'contents', label: 'Can save statuses',
+        path: '/repos/' + slug + '/contents/' + statusPath,
+        fix: 'The token cannot read the statuses file. It needs the Contents permission set to Read and write.' }
+    ];
+
+    var repoVisible = false;
+
+    return probes.reduce(function (chain, probe) {
+      return chain.then(function (acc) {
+        return ghFetch(token, probe.path, null, fetchImpl).then(function () {
+          if (probe.key === 'repo') repoVisible = true;
+          acc.push({ key: probe.key, label: probe.label, ok: true });
+          return acc;
+        }, function (err) {
+          // A missing statuses.json means a fresh board — but only if the
+          // repository itself was reachable. A token with no access 404s on
+          // everything, and calling that green would be a false all-clear.
+          if (probe.key === 'contents' && err.status === 404 && repoVisible) {
+            acc.push({ key: probe.key, label: probe.label, ok: true, note: 'no statuses saved yet' });
+            return acc;
+          }
+          acc.push({ key: probe.key, label: probe.label, ok: false,
+                     detail: describeError(err.status), fix: probe.fix });
+          return acc;
+        });
+      });
+    }, Promise.resolve([]));
+  }
+
   return {
     WORKFLOW: WORKFLOW,
+    checkToken: checkToken,
     b64encode: b64encode,
     b64decode: b64decode,
     readJsonFile: readJsonFile,

@@ -152,12 +152,45 @@ not work, for two independent reasons:
 
 A browser with nothing saved does not look unconfigured, it looks broken —
 Refresh does nothing useful, statuses quietly fail to sync, Tailor refuses. So
-the board shows a banner naming exactly what is missing, with a button that
-opens Settings focused on that field.
+the board shows a banner saying so in plain terms, with a **paste box for a
+setup link** as the first thing offered: that is one paste instead of creating a
+token, and it is what a second device should almost always do.
 
-It clears itself the moment the last piece is saved. Dismissing it is remembered
-against *which* pieces were missing, so clearing one gap and leaving another
-still speaks up, and it never nags about the same thing twice.
+Under it, "No link? Set it up by hand" opens Settings focused on the missing
+field. The paste box hides itself once the link can no longer help — a setup
+link carries the sign-in bits, not the résumé.
+
+The box applies whatever is pasted as soon as it parses, so there is no button
+to find, and it stays quiet while the text is still half-typed rather than
+flashing errors. It accepts the whole URL, just the fragment, or the bare
+payload, because what ends up in a paste box depends on how it was shared.
+
+The banner clears itself the moment the last piece is saved. Dismissing it is
+remembered against *which* pieces were missing, so clearing one gap and leaving
+another still speaks up, and it never nags about the same thing twice.
+
+### Checking a token actually works
+
+A token with the wrong permissions looks identical to a good one until
+something silently fails to save. **Settings → Check it works** probes what the
+board actually needs and reports it in plain language:
+
+```
+✓ Can see the repository
+✓ Can start a search
+✕ Can save statuses
+    The token cannot read the statuses file. It needs the Contents
+    permission set to Read and write.
+```
+
+Read access is probed directly. Write access cannot be probed without writing,
+so it is reported as unproven rather than guessed at. A 404 on the statuses file
+counts as healthy only when the repository itself was reachable — a token with
+no access 404s on everything, and calling that green would be a false all-clear.
+
+Settings also carries a collapsed step-by-step walkthrough for creating the
+token, naming this repository explicitly and calling out the one trap: the
+default **Public repositories** option is read-only and will not work.
 
 ### Getting it onto a second browser
 
