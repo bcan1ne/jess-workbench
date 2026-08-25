@@ -1118,6 +1118,146 @@ function revertCompanies(){
   });
 }
 
+/* --------------------------------------------------- learn from a job */
+
+var LEARNING=false;
+var LAST_SUGGESTIONS=[];
+
+function learnState(msg,bad){
+  var el=$('learnState');
+  el.textContent=msg||'';
+  el.className='keystate'+(bad?'':' set');
+  el.hidden=!msg;
+}
+
+/**
+ * Reads a job she likes and proposes settings changes. Nothing is written: the
+ * proposals land in the form above, and she still has to press Save.
+ */
+function learnFromJob(){
+  if(LEARNING) return;
+  var url=$('learnUrl').value.trim();
+  var key=readLocal(ANTH_KEY);
+
+  $('learnResult').hidden=true;
+  if(!key){
+    learnState('This needs an Anthropic key — add one under Anthropic key below.',true);
+    return;
+  }
+  if(!url){ learnState('Paste a link to the job first.',true); return; }
+
+  LEARNING=true;
+  $('learnBtn').disabled=true;
+  learnState('Reading the posting… this takes a few seconds.');
+
+  var R=window.JobScoutRefine;
+  // Read against the form, not the saved file, so it builds on unsaved edits.
+  R.refineFrom(key,url,readConfigForm().config).then(function(out){
+    renderSuggestions(out,url);
+    learnState('');
+  },function(err){
+    learnState(R.redact(err.message||String(err),key),true);
+  }).then(function(){
+    LEARNING=false;
+    $('learnBtn').disabled=false;
+  });
+}
+
+var FIELD_LABELS={
+  titles:'Job titles to look for', industry:'Industries',
+  workSetup:'Remote, hybrid or on-site', hardNos:'Never show me',
+  minSalary:'Lowest salary worth seeing'
+};
+
+function renderSuggestions(out,url){
+  var B=window.JobScoutBoards;
+  LAST_SUGGESTIONS=out.suggestions||[];
+  var role=out.role||{};
+  var box=$('learnResult');
+
+  var head='<div class="roleline"><b>'+esc(role.title||'That posting')+'</b>'+
+    (role.company?' at <b>'+esc(role.company)+'</b>':'')+
+    (role.salary?' · '+esc(role.salary):'')+
+    (role.setup?' · '+esc(role.setup):'')+
+    (role.summary?'<br>'+esc(role.summary):'')+'</div>';
+
+  var body;
+  if(!LAST_SUGGESTIONS.length){
+    body='<p class="sugg"><span class="none">Your settings already cover this one — '+
+      'nothing needs changing.</span></p>';
+  }else{
+    body='<ul class="sugg">'+LAST_SUGGESTIONS.map(function(s,i){
+      var shown=s.field==='minSalary'
+        ? '$'+Number(s.value).toLocaleString()
+        : (s.action==='replace'?'Replace with: ':'Add: ')+s.value;
+      return '<li><input type="checkbox" id="sg'+i+'" data-sugg="'+i+'" checked>'+
+        '<label class="what" for="sg'+i+'">'+
+          '<span class="field">'+esc(FIELD_LABELS[s.field]||s.field)+'</span>'+
+          '<span class="val">'+esc(shown)+'</span>'+
+          (s.why?'<span class="why">'+esc(s.why)+'</span>':'')+
+        '</label></li>';
+    }).join('')+'</ul>'+
+    '<button class="panel-btn ui" id="applySuggBtn" type="button" style="margin-left:0">Use the ticked ones</button>';
+  }
+
+  // If the link is a board we can poll, offer to watch that employer too.
+  var found=B.parseBoardUrl(url);
+  var watch='';
+  if(found){
+    var have=(DATA.companies||[]).some(function(c){
+      return c.ats===found.ats&&String(c.board).toLowerCase()===found.board;
+    });
+    if(!have){
+      watch='<p class="hint" style="margin:12px 0 0">'+
+        esc(role.company||B.guessName(found.board))+' posts on '+esc(B.label(found.ats))+
+        ', so every search could check them directly. '+
+        '<button class="linkish ui" id="watchThisBtn" type="button" '+
+        'data-ats="'+esc(found.ats)+'" data-board="'+esc(found.board)+'" '+
+        'data-name="'+esc(role.company||B.guessName(found.board))+'">Add them to the watchlist</button></p>';
+    }
+  }
+
+  box.innerHTML=head+body+watch;
+  box.hidden=false;
+}
+
+function applySuggestions(){
+  var R=window.JobScoutRefine;
+  var picked=Array.prototype.filter.call(
+    document.querySelectorAll('#learnResult [data-sugg]'),
+    function(cb){ return cb.checked; });
+
+  if(!picked.length){ toast('Tick at least one first.',true); return; }
+
+  // Start from the form so unsaved edits are not thrown away.
+  var cfg=readConfigForm().config;
+  picked.forEach(function(cb){
+    var s=LAST_SUGGESTIONS[Number(cb.getAttribute('data-sugg'))];
+    if(s) cfg=R.applySuggestion(cfg,s);
+  });
+
+  CONFIG_FIELDS.forEach(function(k){
+    var el=$('s_'+k);
+    if(el&&cfg[k]!=null) el.value=String(cfg[k]);
+  });
+
+  $('learnResult').hidden=true;
+  $('learnUrl').value='';
+  configState(picked.length+' change'+(picked.length===1?'':'s')+
+    ' put into the boxes above. Check them, then Save settings.');
+  toast('Applied above — press Save settings to keep them.');
+}
+
+function watchThisEmployer(btn){
+  var name=btn.getAttribute('data-name');
+  DATA.companies=(DATA.companies||[]).concat([{
+    name:name, ats:btn.getAttribute('data-ats'), board:btn.getAttribute('data-board')
+  }]);
+  renderCompanies();
+  btn.parentNode.innerHTML='Added '+esc(name)+
+    ' to the watchlist — press <b>Save the list</b> above to keep it.';
+}
+
 /* -------------------------------------------------------------- config */
 
 function configState(msg,bad){
@@ -1700,6 +1840,14 @@ $('bannerGo').addEventListener('click',function(e){
 $('bannerDismiss').addEventListener('click',dismissBanner);
 $('checkTokenBtn').addEventListener('click',checkToken);
 $('saveConfigBtn').addEventListener('click',saveConfig);
+$('learnBtn').addEventListener('click',learnFromJob);
+$('learnUrl').addEventListener('keydown',function(e){
+  if(e.key==='Enter'){ e.preventDefault(); learnFromJob(); }
+});
+$('learnResult').addEventListener('click',function(e){
+  if(e.target.id==='applySuggBtn') applySuggestions();
+  if(e.target.id==='watchThisBtn') watchThisEmployer(e.target);
+});
 $('addCompanyBtn').addEventListener('click',addCompany);
 $('saveCompaniesBtn').addEventListener('click',saveCompanies);
 $('revertCompaniesBtn').addEventListener('click',revertCompanies);

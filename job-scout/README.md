@@ -146,6 +146,31 @@ always agree.
 `multiplier` turns straight-line miles into an estimated drive — 1.3 is a fair
 factor for this terrain. It is an estimate, not a routed distance.
 
+### Learning the settings from a job she likes
+
+"Here is a role I want more of" is far easier to express than a semicolon-
+separated list of target titles. **Settings → Show it a job you like** takes a
+link to any posting, reads it, and proposes changes to the settings above.
+
+The browser cannot fetch a job page itself — almost no job site sends CORS
+headers — so the read happens through the Anthropic `web_fetch` tool,
+server-side, and only the conclusions come back. Same key as tailoring; this
+never touches the repository.
+
+Nothing is applied automatically. Each proposal is a tick box with a one-line
+reason, they land in the settings boxes when she accepts them, and she still has
+to press **Save settings**. Suggestions naming a field the page does not edit —
+coordinates, radius, `repo` — are discarded before they are shown: a suggestion
+list is not a licence to write anywhere. Adding a title she already has is a
+no-op rather than a duplicate.
+
+If the link is a Greenhouse, Lever or Ashby board, it also offers to add that
+employer to the watchlist.
+
+A page that cannot be read says so. Server-tool failures come back as HTTP 200
+with an error block rather than as an error, so that case is checked for
+explicitly instead of being mistaken for an empty answer.
+
 ## Refreshing from the dashboard
 
 **Refresh listings** in the sidebar starts a workflow run without leaving the

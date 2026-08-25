@@ -429,6 +429,44 @@
     padding:9px 12px;border-radius:2px;margin:0 0 13px;color:var(--ink-soft);
   }
 
+  /* ---------------------------------------------------------- learn */
+  .learnbox{
+    border:1px solid var(--line);border-left:3px solid var(--tag-high);
+    border-radius:3px;background:var(--card);padding:13px 14px;margin:4px 0 18px;
+  }
+  .learnbox h4{
+    font-family:'Archivo',sans-serif;font-size:13px;font-weight:600;
+    color:var(--rail);margin:0 0 5px;
+  }
+  .learnbox .linkrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;}
+  .learnbox .linkrow input{
+    flex:1;min-width:180px;font-family:'Archivo',sans-serif;font-size:13.5px;color:var(--ink);
+    background:var(--paper);border:1px solid var(--line-strong);border-radius:3px;padding:8px 11px;
+  }
+  .learnbox .linkrow input:focus{outline:2px solid var(--focus);outline-offset:1px;border-color:transparent;}
+
+  .roleline{
+    font-family:'Archivo',sans-serif;font-size:13px;color:var(--ink-soft);
+    background:var(--paper);border-radius:3px;padding:9px 11px;margin:12px 0 10px;
+  }
+  .roleline b{color:var(--ink);font-weight:600;}
+
+  .sugg{list-style:none;margin:0 0 12px;padding:0;}
+  .sugg li{
+    display:flex;gap:10px;align-items:flex-start;
+    padding:9px 0;border-bottom:1px solid var(--line);
+  }
+  .sugg li:last-child{border-bottom:none;}
+  .sugg input[type=checkbox]{accent-color:var(--tag-high);width:14px;height:14px;margin-top:3px;flex:0 0 auto;}
+  .sugg .what{flex:1;min-width:0;}
+  .sugg .field{
+    font-family:'Archivo',sans-serif;font-size:9.5px;font-weight:600;letter-spacing:.12em;
+    text-transform:uppercase;color:var(--ink-faint);display:block;margin-bottom:2px;
+  }
+  .sugg .val{font-family:'Archivo',sans-serif;font-size:13.5px;color:var(--ink);font-weight:600;}
+  .sugg .why{font-family:'Archivo',sans-serif;font-size:12.5px;color:var(--ink-soft);display:block;margin-top:3px;}
+  .sugg .none{color:var(--ink-faint);font-style:italic;padding:9px 0;}
+
   /* ---------------------------------------------------------- companies */
   .complist{list-style:none;margin:14px 0 12px;padding:0;border:1px solid var(--line);border-radius:3px;background:var(--card);}
   .complist li{
@@ -857,6 +895,18 @@
       <textarea id="s_hardNos" rows="2"></textarea>
       <span class="fieldhint">Separate them with semicolons.</span></div>
 
+    <div class="learnbox">
+      <h4>Not sure what to put? Show it a job you like</h4>
+      <p class="hint">Paste a link to a job you would happily take. It reads the posting and suggests what to change above, so more like it turn up. Nothing changes until you say so.</p>
+      <div class="linkrow">
+        <label for="learnUrl" class="vh">Link to a job you like</label>
+        <input type="text" id="learnUrl" placeholder="https://…" autocomplete="off" spellcheck="false">
+        <button class="panel-btn ui" id="learnBtn" type="button" style="margin-left:0">Have a look</button>
+      </div>
+      <div class="keystate" id="learnState" hidden></div>
+      <div id="learnResult" hidden></div>
+    </div>
+
     <div class="keystate" id="configState">Loaded from the repository.</div>
     <button class="panel-btn ui" id="saveConfigBtn" type="button">Save settings</button>
     <button class="panel-btn sub ui" id="revertConfigBtn" type="button">Undo changes</button>
@@ -890,6 +940,7 @@
 
 <script src="vendor/qrcode.js"></script>
 <script src="boards.js"></script>
+<script src="refine.js"></script>
 <script src="github.js"></script>
 <script src="resume.js"></script>
 <script src="app.js"></script>
