@@ -1121,17 +1121,68 @@ function clearToken(){
  * log, and a bookmark of it rides the browser's own sync between devices.
  */
 
+/*
+ * Both credentials are already made of URL-safe characters, so wrapping them in
+ * base64 only inflated the link by a third — which meant a denser QR code that
+ * stopped decoding when it was scaled down. They go in as they are, separated
+ * by a tilde, and each is recognised by its own prefix so no field markers are
+ * needed either.
+ *
+ * Leaving them unencoded also keeps GitHub's secret scanning able to recognise
+ * a token if the link is ever pasted somewhere it should not be. Base64 would
+ * have hidden it from the one thing that would catch the mistake.
+ */
+
+var GH_TOKEN_RE = /^gh[pousr]_|^github_pat_/;
+var ANTH_KEY_RE = /^sk-ant-/;
+
+function fromB64Url(s){
+  var b64=String(s||'').replace(/-/g,'+').replace(/_/g,'/');
+  while(b64.length%4) b64+='=';
+  return b64;
+}
+
 function buildSetupLink(){
-  var payload={};
+  var parts=[];
   var t=readToken();
   var a=readLocal(ANTH_KEY);
-  if(t) payload.t=t;
-  if(a) payload.a=a;
-  if(!Object.keys(payload).length) return '';
+  if(t) parts.push(t);
+  if(a) parts.push(a);
+  if(!parts.length) return '';
 
-  var base=location.origin+location.pathname;
-  return base+'#setup='+encodeURIComponent(
-    window.JobScoutGitHub.b64encode(JSON.stringify(payload)));
+  return location.origin+location.pathname+'#setup='+parts.join('~');
+}
+
+/**
+ * Draws the setup link as a QR code so a phone can be set up by pointing its
+ * camera at the laptop — no typing, no messaging a credential to yourself.
+ * Rendered here in the page: the link never goes to a QR service.
+ */
+function renderSetupQr(){
+  var link=buildSetupLink();
+  var box=$('setupQr');
+  if(!link){ toast('Save a token or a key first — there is nothing to carry over.',true); return; }
+
+  var qr=window.qrcode(0,'L');
+  qr.addData(link);
+  qr.make();
+
+  var n=qr.getModuleCount();
+  var quiet=4;                      // the spec's minimum silent margin
+  var size=n+quiet*2;
+  var rects='';
+  for(var r=0;r<n;r++){
+    for(var c=0;c<n;c++){
+      if(qr.isDark(r,c)) rects+='<rect x="'+(c+quiet)+'" y="'+(r+quiet)+'" width="1" height="1"/>';
+    }
+  }
+
+  box.innerHTML='<svg viewBox="0 0 '+size+' '+size+'" role="img" '+
+    'aria-label="QR code containing your setup link" shape-rendering="crispEdges">'+
+    '<rect width="'+size+'" height="'+size+'" fill="#ffffff"/>'+
+    '<g fill="#10231f">'+rects+'</g></svg>';
+  box.hidden=false;
+  $('setupQrHint').hidden=false;
 }
 
 function copySetupLink(){
@@ -1170,12 +1221,28 @@ function readSetupPayload(raw){
 
   var m=/[#&?]setup=([^&\s]+)/.exec(text);
   var encoded=m?m[1]:text;
+  try{ encoded=decodeURIComponent(encoded); }catch(err){ /* already decoded */ }
 
-  var payload;
-  try{
-    payload=JSON.parse(window.JobScoutGitHub.b64decode(decodeURIComponent(encoded)));
-  }catch(err){
-    return { ok:false, reason:'That does not look like a setup link. Copy it again from the other browser.' };
+  var payload=null;
+
+  // Current form: the credentials themselves, tilde separated.
+  if(GH_TOKEN_RE.test(encoded)||ANTH_KEY_RE.test(encoded)||encoded.indexOf('~')!==-1){
+    payload={};
+    encoded.split('~').forEach(function(v){
+      v=v.trim();
+      if(GH_TOKEN_RE.test(v)) payload.t=v;
+      else if(ANTH_KEY_RE.test(v)) payload.a=v;
+    });
+    if(!payload.t&&!payload.a) payload=null;
+  }
+
+  // Older links wrapped the same thing in base64'd JSON.
+  if(!payload){
+    try{
+      payload=JSON.parse(window.JobScoutGitHub.b64decode(fromB64Url(encoded)));
+    }catch(err){
+      return { ok:false, reason:'That does not look like a setup link. Copy it again from the other browser.' };
+    }
   }
   if(!payload||typeof payload!=='object'){
     return { ok:false, reason:'That setup link was empty.' };
@@ -1287,6 +1354,7 @@ function clearStatuses(){
 
 $('refreshBtn').addEventListener('click',doRefresh);
 $('clearTokenBtn').addEventListener('click',clearToken);
+$('setupQrBtn').addEventListener('click',renderSetupQr);
 $('setupLinkBtn').addEventListener('click',copySetupLink);
 $('bannerGo').addEventListener('click',function(e){
   openPanel(e.currentTarget.getAttribute('data-focus'));

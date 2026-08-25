@@ -419,6 +419,16 @@
     padding:9px 12px;border-radius:2px;margin:0 0 13px;color:var(--ink-soft);
   }
 
+  /* ---------------------------------------------------------- qr */
+  /* A link this long needs a 73-module code, and a camera needs roughly four
+     screen pixels per module to read one. Anything much under 320px stops
+     decoding — verified with an independent decoder, not by eye. */
+  .qrbox{
+    background:#fff;border:1px solid var(--line-strong);border-radius:3px;
+    padding:8px;margin:12px 0 6px;width:min(336px,100%);
+  }
+  .qrbox svg{display:block;width:100%;height:auto;}
+
   /* ---------------------------------------------------------- how-to */
   .howto{
     border:1px solid var(--line);border-radius:3px;background:var(--card);
@@ -726,9 +736,12 @@
     <p class="hint">Credentials cannot be committed. A token in a public repository is revoked by GitHub within minutes, and until it is, it lets anyone rewrite the workflow that holds the Anthropic secret. This is the way round that.</p>
     <p class="warnbox">The link below <b>contains your live credentials</b>. Bookmark it; do not email it or paste it anywhere. Anyone who opens it arms their browser as if it were yours.</p>
     <div class="bar" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-      <button class="panel-btn ui" id="setupLinkBtn" type="button">Copy setup link</button>
-      <button class="panel-btn sub ui" id="setupRevealBtn" type="button" style="margin-left:0">Show it</button>
+      <button class="panel-btn ui" id="setupQrBtn" type="button">Show QR code</button>
+      <button class="panel-btn sub ui" id="setupLinkBtn" type="button" style="margin-left:0">Copy link</button>
+      <button class="panel-btn sub ui" id="setupRevealBtn" type="button" style="margin-left:0">Show link</button>
     </div>
+    <div class="qrbox" id="setupQr" hidden></div>
+    <p class="hint" id="setupQrHint" hidden style="margin-top:2px">Point the other phone's camera at this, then open the link it offers. Anyone who can see this screen can scan it, so close it when you are done.</p>
     <label for="setupLink" class="vh">Setup link</label>
     <textarea class="exportbox mono" id="setupLink" readonly spellcheck="false" hidden style="min-height:70px"></textarea>
     <p class="hint" style="margin-top:13px;margin-bottom:0">Open it once in each browser and the credentials save themselves. Kept as a bookmark, your browser's own bookmark sync carries it between devices — and the part after the <span class="mono">#</span> is never sent over the network, so the secret reaches no server and no log.</p>
@@ -795,6 +808,7 @@
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+<script src="vendor/qrcode.js"></script>
 <script src="github.js"></script>
 <script src="resume.js"></script>
 <script src="app.js"></script>
