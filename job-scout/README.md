@@ -35,12 +35,12 @@ error text before it can reach a log line.
 | Path | What it is |
 |---|---|
 | `config.json` | Every search setting. Editing this is the only way to change the search. |
-| `companies.json` | The employer watchlist polled directly from Greenhouse, Lever, and Ashby. |
+| `companies.json` | The employer watchlist, editable in Settings, polled directly from Greenhouse, Lever, and Ashby. |
 | `jobs.json` | The board. Appended to by the workflow, never rewritten. |
 | `locals.json` | Hand-curated nearby employers. The workflow does not touch it. |
 | `statuses.json` | Committed statuses, written from the dashboard and shared by every browser. |
 | `src/` | The workflow's Node modules and their tests. |
-| `site/` | The dashboard — a sortable, filterable table. `github.js` starts runs and syncs statuses, `resume.js` tailors, `app.js` renders. |
+| `site/` | The dashboard — a sortable, filterable table. `github.js` starts runs and syncs statuses, `resume.js` tailors, `boards.js` reads a job link, `app.js` renders. |
 | `build.js` | Stages `site/` plus the JSON into `_site/` for Pages and local preview. |
 
 ## Where listings come from
@@ -58,15 +58,27 @@ non-exhaustive and capped per run.
 
 The two complement each other: search discovers, the watchlist watches.
 
-Adding a company is one line:
+### Adding a company
+
+In **Settings → Companies to keep an eye on**, paste a link to any job at that
+employer. The ATS and the employer's slug are both sitting in that link, so
+there is nothing to look up — Greenhouse, Lever and Ashby links are all
+recognised, including the `eu.` hosts and Greenhouse's embedded-board form. A
+link that is not one of those is refused with an explanation rather than saved
+as a company that can never be polled.
+
+The guessed name is editable, because it is what shows in the board's Company
+column: `pomelohealth` guesses to "Pomelohealth", and only a person knows it
+should read "Pomelo Health".
+
+Saving commits `companies.json`. Under the hood an entry is just:
 
 ```json
 { "name": "Pomelo Care", "ats": "greenhouse", "board": "pomelocare" }
 ```
 
-`ats` is `greenhouse`, `lever`, or `ashby`. `board` is the slug in the
-employer's job-board URL. An unreachable or renamed board is reported and
-skipped — it never fails the run.
+An unreachable or renamed board is reported in the run log and skipped — it
+never fails the run.
 
 ### Keeping the cost flat
 

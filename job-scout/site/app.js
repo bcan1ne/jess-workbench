@@ -10,7 +10,7 @@
  *   updateDrivingDist() -> computed here from config.json, same math as the sheet
  */
 
-var DATA = { jobs: [], rawJobs: [], locals: [], config: {}, committedStatuses: {}, branch: null };
+var DATA = { jobs: [], rawJobs: [], locals: [], companies: [], config: {}, committedStatuses: {}, branch: null };
 var FILTER = 'all';
 var STORE_KEY = 'jobScout.statuses.v1';
 var QUERY = '';
@@ -194,6 +194,7 @@ function load(){
     $('skeleton').hidden=true;
     $('tableView').hidden=false;
     render(); renderLocals(); fillSettings();
+    loadCompanies();
     // The published statuses.json lags a Pages deploy behind. With a token,
     // re-read the committed file directly so every browser agrees right away.
     return syncStatuses();
@@ -972,6 +973,151 @@ function dismissBanner(){
   $('setupBanner').hidden=true;
 }
 
+/* ----------------------------------------------------------- companies */
+
+var COMPANIES_PATH='job-scout/companies.json';
+
+function loadCompanies(){
+  return getJson('companies.json',[]).then(function(list){
+    DATA.companies=Array.isArray(list)?list:[];
+    renderCompanies();
+  });
+}
+
+function renderCompanies(){
+  var B=window.JobScoutBoards;
+  var list=DATA.companies||[];
+  var el=$('companyList');
+
+  if(!list.length){
+    el.innerHTML='<li class="none">No companies yet — the search still covers the open web.</li>';
+    return;
+  }
+
+  el.innerHTML=list.map(function(c,i){
+    var url=B.boardUrl(c);
+    var name=c.name||B.guessName(c.board);
+    // The name is editable because it is what shows in the Company column on
+    // the board — a slug like "pomelohealth" guesses to "Pomelohealth", and
+    // only a person knows it should read "Pomelo Health".
+    return '<li>'+
+      '<label class="vh" for="cn'+i+'">Company name</label>'+
+      '<input class="nm" id="cn'+i+'" type="text" value="'+esc(name)+'" data-name="'+i+'">'+
+      '<span class="via">'+esc(B.label(c.ats))+' · '+
+        (url?'<a href="'+esc(url)+'" target="_blank" rel="noopener" title="Open this job board">'+esc(c.board)+'</a>':esc(c.board))+
+      '</span>'+
+      '<button class="drop ui" type="button" data-drop="'+i+'" '+
+        'aria-label="Remove '+esc(name)+'" title="Remove">×</button>'+
+    '</li>';
+  }).join('');
+}
+
+function companyAddState(msg,bad){
+  var el=$('companyAddState');
+  el.textContent=msg||'';
+  el.className='keystate'+(bad?'':' set');
+  el.hidden=!msg;
+}
+
+function addCompany(){
+  var B=window.JobScoutBoards;
+  var field=$('companyUrl');
+  var raw=field.value.trim();
+  if(!raw){ companyAddState('Paste a link to a job at that company first.',true); return; }
+
+  var found=B.parseBoardUrl(raw);
+  if(!found){
+    companyAddState('That link is not a Greenhouse, Lever or Ashby job page, so there is '+
+      'no page to watch. The web search still covers that employer.',true);
+    return;
+  }
+
+  var already=(DATA.companies||[]).filter(function(c){
+    return c.ats===found.ats&&String(c.board).toLowerCase()===found.board;
+  })[0];
+  if(already){
+    companyAddState((already.name||found.board)+' is already on the list.',true);
+    field.value='';
+    return;
+  }
+
+  DATA.companies=(DATA.companies||[]).concat([{
+    name:B.guessName(found.board), ats:found.ats, board:found.board
+  }]);
+  field.value='';
+  renderCompanies();
+  companyAddState('Added '+B.guessName(found.board)+' — choose Save the list to keep it.');
+}
+
+function dropCompany(i){
+  var list=DATA.companies||[];
+  if(i<0||i>=list.length) return;
+  var gone=list[i];
+  DATA.companies=list.slice(0,i).concat(list.slice(i+1));
+  renderCompanies();
+  companyState('Removed '+(gone.name||gone.board)+' — choose Save the list to keep it.');
+}
+
+function companyState(msg,bad){
+  var el=$('companyState');
+  el.textContent=msg||'';
+  el.className='keystate'+(bad?'':' set');
+  el.hidden=!msg;
+}
+
+function saveCompanies(){
+  var token=readToken();
+  var slug=repoSlug();
+  var list=(DATA.companies||[]).filter(function(c){
+    return c&&c.board&&window.JobScoutBoards.isKnownAts(c.ats);
+  });
+
+  if(!token||!slug){
+    companyState('Cannot save without a token — this list only matters to the search, '+
+      'which reads it from the repository.',true);
+    return;
+  }
+
+  companyState('Saving…');
+  $('saveCompaniesBtn').disabled=true;
+  var GH=window.JobScoutGitHub;
+
+  GH.readJsonFile(token,slug,COMPANIES_PATH,DATA.branch).then(function(cur){
+    return GH.writeJsonFile(token,slug,COMPANIES_PATH,DATA.branch,list,cur.sha,
+      'Job Scout: update the company watchlist').then(function(){
+        DATA.companies=list;
+        renderCompanies();
+        companyState(list.length+' compan'+(list.length===1?'y':'ies')+
+          ' saved. The next search checks them.');
+        toast('Company list saved.');
+      });
+  },function(err){
+    companyState(GH.redact(err.message||String(err),token),true);
+    toast(GH.redact(err.message||String(err),token),true);
+  }).then(function(){
+    $('saveCompaniesBtn').disabled=false;
+  });
+}
+
+function revertCompanies(){
+  var token=readToken();
+  var slug=repoSlug();
+  companyAddState('');
+  if(!token||!slug){
+    return loadCompanies().then(function(){ companyState('Back to the published list.'); });
+  }
+  companyState('Reloading…');
+  window.JobScoutGitHub.readJsonFile(token,slug,COMPANIES_PATH,DATA.branch).then(function(cur){
+    if(Array.isArray(cur.data)) DATA.companies=cur.data;
+    renderCompanies();
+    companyState('Back to what is saved.');
+  },function(){
+    loadCompanies().then(function(){
+      companyState('Could not reach the saved copy; showing the published list.',true);
+    });
+  });
+}
+
 /* -------------------------------------------------------------- config */
 
 function configState(msg,bad){
@@ -1554,6 +1700,23 @@ $('bannerGo').addEventListener('click',function(e){
 $('bannerDismiss').addEventListener('click',dismissBanner);
 $('checkTokenBtn').addEventListener('click',checkToken);
 $('saveConfigBtn').addEventListener('click',saveConfig);
+$('addCompanyBtn').addEventListener('click',addCompany);
+$('saveCompaniesBtn').addEventListener('click',saveCompanies);
+$('revertCompaniesBtn').addEventListener('click',revertCompanies);
+$('companyUrl').addEventListener('keydown',function(e){
+  if(e.key==='Enter'){ e.preventDefault(); addCompany(); }
+});
+$('companyList').addEventListener('click',function(e){
+  var btn=e.target.closest('[data-drop]');
+  if(btn) dropCompany(Number(btn.getAttribute('data-drop')));
+});
+// Typed straight into DATA rather than re-rendering, so the field keeps focus.
+$('companyList').addEventListener('input',function(e){
+  var i=e.target.getAttribute('data-name');
+  if(i==null) return;
+  var c=(DATA.companies||[])[Number(i)];
+  if(c){ c.name=e.target.value; companyState('Edited — choose Save the list to keep it.'); }
+});
 $('revertConfigBtn').addEventListener('click',revertConfig);
 $('bannerApply').addEventListener('click',applyPastedSetupLink);
 $('bannerLink').addEventListener('keydown',function(e){

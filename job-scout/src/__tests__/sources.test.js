@@ -168,3 +168,85 @@ test('matching is case-insensitive and tolerates punctuation', function () {
   var r = S.prefilter([p('CLIENT SUCCESS MANAGER (Strategic Accounts)'), p('client-success-manager')], CFG, []);
   assert.strictEqual(r.kept.length, 2);
 });
+
+/* --------------------------------------------------- recognising a job link */
+
+var B = require('../../site/boards.js');
+
+test('a Greenhouse job link yields the employer slug', function () {
+  assert.deepStrictEqual(
+    B.parseBoardUrl('https://job-boards.greenhouse.io/mavenclinic/jobs/8395016002'),
+    { ats: 'greenhouse', board: 'mavenclinic' });
+  assert.deepStrictEqual(
+    B.parseBoardUrl('https://boards.greenhouse.io/cedar/jobs/123'),
+    { ats: 'greenhouse', board: 'cedar' });
+});
+
+test('the EU hosts are recognised too — easy to miss and silently wrong', function () {
+  assert.deepStrictEqual(B.parseBoardUrl('https://boards.eu.greenhouse.io/someco'),
+    { ats: 'greenhouse', board: 'someco' });
+  assert.deepStrictEqual(B.parseBoardUrl('https://jobs.eu.lever.co/someco/1'),
+    { ats: 'lever', board: 'someco' });
+});
+
+test('Lever and Ashby links work', function () {
+  assert.deepStrictEqual(B.parseBoardUrl('https://jobs.lever.co/rightwayhealthcare/abc-123'),
+    { ats: 'lever', board: 'rightwayhealthcare' });
+  assert.deepStrictEqual(B.parseBoardUrl('https://jobs.ashbyhq.com/openai/xyz'),
+    { ats: 'ashby', board: 'openai' });
+});
+
+test("Greenhouse's embedded board keeps the slug in a query parameter", function () {
+  assert.deepStrictEqual(B.parseBoardUrl('https://my.greenhouse.io/embed/job_board?for=acmehealth'),
+    { ats: 'greenhouse', board: 'acmehealth' });
+});
+
+test('a bare host works, so a careers page pasted without https is fine', function () {
+  assert.deepStrictEqual(B.parseBoardUrl('boards.greenhouse.io/pomelocare'),
+    { ats: 'greenhouse', board: 'pomelocare' });
+});
+
+test('the slug is lowercased, since board slugs are', function () {
+  assert.strictEqual(B.parseBoardUrl('https://jobs.lever.co/RightWay/1').board, 'rightway');
+});
+
+test('an aggregator or job site is not a board we can watch', function () {
+  assert.strictEqual(B.parseBoardUrl('https://builtin.com/job/whatever/123'), null);
+  assert.strictEqual(B.parseBoardUrl('https://www.linkedin.com/jobs/view/123'), null);
+  assert.strictEqual(B.parseBoardUrl('https://www.indeed.com/viewjob?jk=1'), null);
+});
+
+test('path furniture is never mistaken for an employer', function () {
+  assert.strictEqual(B.parseBoardUrl('https://job-boards.greenhouse.io/'), null);
+  assert.strictEqual(B.parseBoardUrl('https://my.greenhouse.io/embed/job_board'), null);
+});
+
+test('junk in gives null out rather than a bogus company', function () {
+  ['not a url', '', null, undefined, '   ', 'http://'].forEach(function (v) {
+    assert.strictEqual(B.parseBoardUrl(v), null, 'failed for ' + JSON.stringify(v));
+  });
+});
+
+test('a slug becomes a readable starting name', function () {
+  assert.strictEqual(B.guessName('pomelocare'), 'Pomelocare');
+  assert.strictEqual(B.guessName('rightway-healthcare'), 'Rightway Healthcare');
+  assert.strictEqual(B.guessName('spring_health'), 'Spring Health');
+  assert.strictEqual(B.guessName(''), '');
+});
+
+test('boardUrl points at a page a person can actually open and check', function () {
+  assert.strictEqual(B.boardUrl({ ats: 'greenhouse', board: 'mavenclinic' }),
+    'https://job-boards.greenhouse.io/mavenclinic');
+  assert.strictEqual(B.boardUrl({ ats: 'lever', board: 'x' }), 'https://jobs.lever.co/x');
+  assert.strictEqual(B.boardUrl({ ats: 'ashby', board: 'x' }), 'https://jobs.ashbyhq.com/x');
+  assert.strictEqual(B.boardUrl({ ats: 'workday', board: 'x' }), '');
+  assert.strictEqual(B.boardUrl(null), '');
+});
+
+test('every ats in the shipped watchlist is one the workflow can actually poll', function () {
+  var companies = require('../../companies.json');
+  companies.forEach(function (c) {
+    assert.ok(B.isKnownAts(c.ats), c.name + ' uses an unsupported ats: ' + c.ats);
+    assert.ok(c.board && c.name, 'a watchlist entry is missing board or name');
+  });
+});

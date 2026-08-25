@@ -17,7 +17,7 @@ var http = require('http');
 var ROOT = __dirname;
 var SITE = path.join(ROOT, 'site');
 var OUT = path.join(ROOT, '_site');
-var DATA = ['config.json', 'jobs.json', 'locals.json', 'statuses.json'];
+var DATA = ['config.json', 'companies.json', 'jobs.json', 'locals.json', 'statuses.json'];
 
 var TYPES = {
   '.html': 'text/html; charset=utf-8',

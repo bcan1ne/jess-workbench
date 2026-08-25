@@ -429,6 +429,32 @@
     padding:9px 12px;border-radius:2px;margin:0 0 13px;color:var(--ink-soft);
   }
 
+  /* ---------------------------------------------------------- companies */
+  .complist{list-style:none;margin:14px 0 12px;padding:0;border:1px solid var(--line);border-radius:3px;background:var(--card);}
+  .complist li{
+    display:flex;align-items:center;gap:10px;
+    padding:8px 10px;border-bottom:1px solid var(--line);font-size:13.5px;
+  }
+  .complist li:last-child{border-bottom:none;}
+  .complist .nm{
+    flex:1;min-width:0;font-family:'Archivo',sans-serif;font-size:13.5px;color:var(--ink);
+    background:transparent;border:1px solid transparent;border-radius:3px;padding:4px 6px;
+  }
+  .complist .nm:hover{border-color:var(--line);}
+  .complist .nm:focus{outline:2px solid var(--focus);outline-offset:0;background:var(--paper);border-color:transparent;}
+  .complist .via{
+    font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-faint);
+    white-space:nowrap;
+  }
+  .complist .via a{color:var(--ink-faint);text-decoration:none;border-bottom:1px solid var(--line-strong);}
+  .complist .via a:hover{color:var(--tag-high);}
+  .complist .drop{
+    background:none;border:none;cursor:pointer;color:var(--ink-faint);
+    font-size:16px;line-height:1;padding:3px 6px;border-radius:3px;
+  }
+  .complist .drop:hover{color:var(--tag-low);background:rgba(0,0,0,.05);}
+  .complist .none{color:var(--ink-faint);font-style:italic;}
+
   /* ---------------------------------------------------------- qr */
   /* A link this long needs a 73-module code, and a camera needs roughly four
      screen pixels per module to read one. Anything much under 320px stops
@@ -775,6 +801,27 @@
   </div>
 
   <div class="group">
+    <h3>Companies to keep an eye on</h3>
+    <p class="hint">Every search checks these employers' own job pages, one by one, as well as searching the web. Anything they post shows up even if a web search misses it.</p>
+
+    <div class="field">
+      <label for="companyUrl">Add a company</label>
+      <input type="text" id="companyUrl" placeholder="Paste a link to any job at that company"
+             autocomplete="off" spellcheck="false">
+      <span class="fieldhint">Find one job there, copy the address from your browser, and paste it here. We work out the rest.</span>
+    </div>
+    <div class="keystate" id="companyAddState" hidden></div>
+    <button class="panel-btn ui" id="addCompanyBtn" type="button">Add it</button>
+
+    <ul class="complist" id="companyList"></ul>
+
+    <div class="keystate" id="companyState" hidden></div>
+    <button class="panel-btn ui" id="saveCompaniesBtn" type="button">Save the list</button>
+    <button class="panel-btn sub ui" id="revertCompaniesBtn" type="button">Undo changes</button>
+    <p class="hint" style="margin-top:13px;margin-bottom:0">Only Greenhouse, Lever and Ashby links work. Most digital-health companies use one of them. If a link is not recognised, that employer's page is not one we can watch — the web search still covers them.</p>
+  </div>
+
+  <div class="group">
     <h3>Where you are</h3>
     <p class="hint">Used to work out the drive to any job that is not remote. Changing the radius re-checks every listing straight away.</p>
     <div class="field"><label for="s_homeLabel">Home town</label>
@@ -842,6 +889,7 @@
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script src="vendor/qrcode.js"></script>
+<script src="boards.js"></script>
 <script src="github.js"></script>
 <script src="resume.js"></script>
 <script src="app.js"></script>
