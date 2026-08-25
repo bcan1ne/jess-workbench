@@ -1,9 +1,9 @@
 {
   "checked": "2026-08-25",
   "lastRun": {
-    "ok": false,
+    "ok": true,
     "at": "2026-08-25",
-    "reason": "The Anthropic API key was rejected (401). Check the ANTHROPIC_API_KEY repository secret."
+    "reason": ""
   },
   "boards": {
     "greenhouse:mavenclinic": {
