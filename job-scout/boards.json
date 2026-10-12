@@ -1,15 +1,15 @@
 {
-  "checked": "2026-09-28",
+  "checked": "2026-10-12",
   "lastRun": {
     "ok": false,
-    "at": "2026-09-28",
-    "reason": "No JSON array found in the response."
+    "at": "2026-10-12",
+    "reason": "Response was not parseable JSON: Unexpected non-whitespace character after JSON at position 7298 (line 3 column 1)"
   },
   "boards": {
     "greenhouse:mavenclinic": {
       "name": "Maven Clinic",
       "ok": true,
-      "postings": 36,
+      "postings": 33,
       "reason": ""
     },
     "greenhouse:progyny": {
@@ -21,7 +21,7 @@
     "greenhouse:carrotfertility": {
       "name": "Carrot Fertility",
       "ok": true,
-      "postings": 11,
+      "postings": 15,
       "reason": ""
     },
     "greenhouse:oviahealth": {
@@ -38,9 +38,9 @@
     },
     "greenhouse:pomelocare": {
       "name": "Pomelo Care",
-      "ok": true,
-      "postings": 75,
-      "reason": ""
+      "ok": false,
+      "postings": 0,
+      "reason": "HTTP 404"
     },
     "greenhouse:includedhealth": {
       "name": "Included Health",
@@ -87,7 +87,7 @@
     "greenhouse:omadahealth": {
       "name": "Omada Health",
       "ok": true,
-      "postings": 17,
+      "postings": 18,
       "reason": ""
     },
     "greenhouse:hingehealth": {
