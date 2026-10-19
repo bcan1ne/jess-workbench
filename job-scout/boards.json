@@ -1,15 +1,15 @@
 {
-  "checked": "2026-10-12",
+  "checked": "2026-10-19",
   "lastRun": {
     "ok": false,
-    "at": "2026-10-12",
-    "reason": "Response was not parseable JSON: Unexpected non-whitespace character after JSON at position 7298 (line 3 column 1)"
+    "at": "2026-10-19",
+    "reason": "Anthropic API returned 400. {\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.\"},\"request_id\":\"req_011CgByhZtSF3JW9Hr5DLw2w\"}"
   },
   "boards": {
     "greenhouse:mavenclinic": {
       "name": "Maven Clinic",
       "ok": true,
-      "postings": 33,
+      "postings": 35,
       "reason": ""
     },
     "greenhouse:progyny": {
@@ -21,7 +21,7 @@
     "greenhouse:carrotfertility": {
       "name": "Carrot Fertility",
       "ok": true,
-      "postings": 15,
+      "postings": 16,
       "reason": ""
     },
     "greenhouse:oviahealth": {
@@ -33,7 +33,7 @@
     "greenhouse:cleo": {
       "name": "Cleo",
       "ok": true,
-      "postings": 5,
+      "postings": 6,
       "reason": ""
     },
     "greenhouse:pomelocare": {
@@ -51,7 +51,7 @@
     "greenhouse:garnerhealth": {
       "name": "Garner Health",
       "ok": true,
-      "postings": 75,
+      "postings": 81,
       "reason": ""
     },
     "greenhouse:headway": {
