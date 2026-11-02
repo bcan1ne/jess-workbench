@@ -1,15 +1,15 @@
 {
-  "checked": "2026-10-26",
+  "checked": "2026-11-02",
   "lastRun": {
     "ok": false,
-    "at": "2026-10-26",
-    "reason": "Anthropic API returned 400. {\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.\"},\"request_id\":\"req_011CgRDRnvFLh7f8aZmK3nzE\"}"
+    "at": "2026-11-02",
+    "reason": "Anthropic API returned 400. {\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.\"},\"request_id\":\"req_011Cgek9K2BFWMv1QJpvuAWT\"}"
   },
   "boards": {
     "greenhouse:mavenclinic": {
       "name": "Maven Clinic",
       "ok": true,
-      "postings": 31,
+      "postings": 30,
       "reason": ""
     },
     "greenhouse:progyny": {
@@ -21,7 +21,7 @@
     "greenhouse:carrotfertility": {
       "name": "Carrot Fertility",
       "ok": true,
-      "postings": 14,
+      "postings": 11,
       "reason": ""
     },
     "greenhouse:oviahealth": {
@@ -33,7 +33,7 @@
     "greenhouse:cleo": {
       "name": "Cleo",
       "ok": true,
-      "postings": 6,
+      "postings": 8,
       "reason": ""
     },
     "greenhouse:pomelocare": {
@@ -51,7 +51,7 @@
     "greenhouse:garnerhealth": {
       "name": "Garner Health",
       "ok": true,
-      "postings": 76,
+      "postings": 68,
       "reason": ""
     },
     "greenhouse:headway": {
@@ -87,7 +87,7 @@
     "greenhouse:omadahealth": {
       "name": "Omada Health",
       "ok": true,
-      "postings": 20,
+      "postings": 18,
       "reason": ""
     },
     "greenhouse:hingehealth": {
